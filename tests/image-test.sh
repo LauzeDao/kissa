@@ -28,7 +28,7 @@ check "tofu startet"       tofu version
 check "helm startet"       helm version
 check "flux startet"       flux --version
 check "stackit startet"    stackit --version
-check "glab startet"       glab --version
+check "glab startet"       env HOME=/tmp glab --version   # glab legt beim Start ~/.config/glab-cli an; /root zeigt im Image auf /var
 check "fastfetch startet"  fastfetch --version
 check "podman startet"     podman --version
 check "kissa help läuft"   kissa help
