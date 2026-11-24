@@ -12,10 +12,13 @@ TMP=$(mktemp -d)
 # Lädt eine Datei und prüft sie gegen die Checksummen-Datei des Releases.
 # Die Checksummen-Datei darf nur den Hash enthalten oder Zeilen "HASH  DATEINAME".
 fetch_checked() {
-  local url=$1 sums_url=$2 out=$3 name want
+  local url=$1 sums_url=$2 out=$3 name sums want
   name=$(basename "$url")
   curl -fsSL --retry 3 -o "$out" "$url"
-  want=$(curl -fsSL --retry 3 "$sums_url" | awk -v f="$name" 'NF==1 {print $1; exit} $2==f || $2=="*"f {print $1; exit}')
+  # Erst komplett laden, dann suchen: awk bricht nach dem Treffer ab und würde curl
+  # in einer Pipe mit "Failed writing body" (Exit 23) scheitern lassen.
+  sums=$(curl -fsSL --retry 3 "$sums_url")
+  want=$(awk -v f="$name" 'NF==1 {print $1; exit} $2==f || $2=="*"f {print $1; exit}' <<<"$sums")
   [[ -n $want ]] || { echo "Keine Checksumme für $name gefunden" >&2; exit 1; }
   echo "$want  $out" | sha256sum -c -
 }
