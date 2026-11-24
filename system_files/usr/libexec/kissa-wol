@@ -1,0 +1,18 @@
+#!/usr/bin/python3
+"""kissa-wol <MAC> – weckt einen PC im Heimnetz per Wake-on-LAN (Magic Packet).
+
+Das Magic Packet besteht aus 6 × 0xFF und 16 × der MAC-Adresse. Es geht als Broadcast
+an alle Geräte im Netz; nur die Netzwerkkarte mit dieser MAC schaltet ihren PC ein.
+"""
+import socket
+import sys
+
+mac = sys.argv[1].replace(":", "").replace("-", "").lower()
+if len(mac) != 12 or any(c not in "0123456789abcdef" for c in mac):
+    sys.exit(f"Ungültige MAC-Adresse: {sys.argv[1]}")
+packet = bytes.fromhex("ff" * 6 + mac * 16)
+with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    for port in (9, 7):
+        s.sendto(packet, ("255.255.255.255", port))
+print("Magic Packet gesendet an", sys.argv[1])

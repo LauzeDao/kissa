@@ -34,9 +34,11 @@ install_from_tar() {
 # ---------- Pakete aus den Fedora-Repos ----------
 dnf5 install -y \
   btop \
+  libsecret \
   distrobox \
   fastfetch \
   mtr \
+  restic \
   papirus-icon-theme \
   konsole \
   plymouth-plugin-script \
@@ -187,7 +189,7 @@ make_icon_theme kissa-matcha  "kissa Matcha"  Papirus-Light,breeze,hicolor green
 make_icon_theme kissa-hojicha "kissa Hojicha" Papirus-Dark,breeze,hicolor  pink  '#f06292' '#F0B6C1' '#ec407a' '#E39BAA' '#542233' '#5A2E38'
 
 # ---------- Jahreszeiten + Tag/Nacht: Timer für alle Benutzer ----------
-systemctl --global enable kissa-auto.timer
+systemctl --global enable kissa-auto.timer kissa-backup.timer
 
 # ---------- Härtung ----------
 # 1. Updates nur mit gültiger Signatur: Regel für unser Image in die bestehende
@@ -218,7 +220,7 @@ firewall-offline-cmd --set-default-zone=kissa
 systemctl disable sshd.service 2>/dev/null || true
 
 # ---------- Sonstiges ----------
-chmod 0755 /usr/bin/kissa /usr/bin/pandasay /usr/libexec/kissa-flatpaks /usr/libexec/kissa-sun
+chmod 0755 /usr/bin/kissa /usr/bin/pandasay /usr/libexec/kissa-flatpaks /usr/libexec/kissa-sun /usr/libexec/kissa-wol
 systemctl enable kissa-flatpaks.service
 sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="kissa (Fedora Atomic · Aurora)"/' /usr/lib/os-release
 

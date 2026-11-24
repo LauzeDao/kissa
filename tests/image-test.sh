@@ -58,6 +58,11 @@ for s in fruehling sommer herbst winter; do
 done
 check "Soundtheme kissa"               test -f /usr/share/sounds/kissa/index.theme
 check "Tag/Nacht-Timer (Benutzer)"     test -f /usr/lib/systemd/user/kissa-auto.timer
+check "Backup-Timer (Benutzer)"        test -f /usr/lib/systemd/user/kissa-backup.timer
+check "restic vorhanden"               command -v restic
+check "secret-tool vorhanden"          command -v secret-tool
+check "Wake-on-LAN-Helfer"             test -x /usr/libexec/kissa-wol
+check "Backup-Ausnahmen"               test -s /usr/share/kissa/backup-exclude.txt
 
 section "Boot und Login"
 check "Plymouth-Theme kissa aktiv"     bash -c '[[ $(plymouth-set-default-theme) == kissa ]]'

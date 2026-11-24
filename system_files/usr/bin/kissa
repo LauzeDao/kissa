@@ -9,6 +9,7 @@
 #   kissa theme [matcha|hojicha]     Theme direkt setzen (stellt den Modus auf hell/dunkel)
 #   kissa fenster [layout]  Fenster-Raster (halb, fokus, mitte, drei, raster, stapel)
 #   kissa tipps [wort]    Windows → Linux-Spickzettel (mit Suchwort filtern)
+#   kissa backup [jetzt|einrichten|status|holen]  Sicherung auf den Tower (weckt ihn bei Bedarf)
 #   kissa info            Systemübersicht (fastfetch)
 #   kissa tee [text]      Der Panda sagt etwas
 #   kissa box [ubuntu|rocky|fedora]  Anderes Linux im Terminal (distrobox)
@@ -315,6 +316,138 @@ cmd_lab() {
   esac
 }
 
+# ---------- Backup auf den Tower (restic → rest-server, Wake-on-LAN) ----------
+# Konfiguration: ~/.config/kissa/backup.conf, Passwörter im KDE-Schlüsselbund (secret-tool)
+BCONF="$CONF/kissa/backup.conf"
+BSTATE="${XDG_STATE_HOME:-$HOME/.local/state}/kissa"
+WAKE_FROM=8 WAKE_UNTIL=20      # Tower nur zwischen 8 und 20 Uhr wecken
+
+secret() { secret-tool lookup kissa "$1" 2>/dev/null; }
+gateway_mac() {
+  local gw; gw=$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')
+  [[ -n $gw ]] && ip neigh show "$gw" 2>/dev/null | awk '/lladdr/ {print $5; exit}'
+}
+notify() { has notify-send && notify-send -a kissa -i /usr/share/kissa/hoji-launcher.png "$1" "${2:-}" 2>/dev/null || true; }
+
+restic_env() {
+  # shellcheck source=/dev/null
+  source "$BCONF"
+  export RESTIC_REPOSITORY="rest:http://$TOWER_HOST:${TOWER_PORT:-8000}/$TOWER_USER/"
+  export RESTIC_REST_USERNAME="$TOWER_USER"
+  RESTIC_REST_PASSWORD="$(secret tower)"; export RESTIC_REST_PASSWORD
+  export RESTIC_PASSWORD_COMMAND="secret-tool lookup kissa backup-repo"
+  [[ -n $RESTIC_REST_PASSWORD ]] || { warn "Tower-Passwort fehlt im Schlüsselbund – kissa backup einrichten"; return 1; }
+}
+tower_up() { curl -s -o /dev/null -m 3 "http://$TOWER_HOST:${TOWER_PORT:-8000}/" ; }
+last_backup() { cat "$BSTATE/backup-last" 2>/dev/null || echo 0; }
+
+backup_run() {
+  local log="$BSTATE/backup.log" out
+  mkdir -p "$BSTATE"
+  if ! out=$(systemd-inhibit --what=sleep:shutdown --who=kissa --why="Backup läuft" \
+        restic backup "$HOME" --exclude-file=/usr/share/kissa/backup-exclude.txt --exclude-caches \
+        --tag kissa --host "$(hostname)" 2>&1); then
+    printf '%s\n%s\n' "--- $(date) FEHLER" "$out" >> "$log"
+    warn "Backup fehlgeschlagen – Details: $log"; notify "Backup fehlgeschlagen" "Details: $log"; return 1
+  fi
+  printf '%s\n%s\n' "--- $(date) ok" "$(tail -n 4 <<<"$out")" >> "$log"
+  date +%s > "$BSTATE/backup-last"
+  local added; added=$(grep -o 'Added to the repository: .*' <<<"$out" | cut -d: -f2- | sed 's/^ *//')
+  ok "Backup fertig (neu: ${added:-?})"
+  [[ -n $QUIET ]] && notify "Backup fertig 🐾" "Neu im Backup: ${added:-?}"
+  return 0
+}
+
+backup_setup() {
+  title "Backup einrichten"
+  has restic && has secret-tool || { warn "restic oder secret-tool fehlt"; return 1; }
+  note "Die Werte zeigt dir das Tower-Skript (kissa-tower.ps1) am Ende an."
+  local host mac user pass repo gw
+  host=$(gum input --placeholder "IP-Adresse des Towers, z. B. 192.168.2.50" --header "Tower-IP")
+  mac=$(gum input --placeholder "AA-BB-CC-DD-EE-FF" --header "MAC-Adresse des Towers (für das Wecken)")
+  user=$(gum input --value kissa --header "Benutzer")
+  pass=$(gum input --password --header "Passwort (vom Tower-Skript)")
+  [[ -n $host && -n $mac && -n $user && -n $pass ]] || { warn "Abgebrochen – alle Felder werden gebraucht"; return 1; }
+  gw=$(gateway_mac || true)
+  [[ -n $gw ]] || warn "Router-Adresse nicht gefunden – bist du im Heimnetz? Ohne sie sichert kissa überall, wo der Tower erreichbar ist."
+  mkdir -p "$CONF/kissa"
+  printf 'TOWER_HOST=%q\nTOWER_PORT=8000\nTOWER_MAC=%q\nTOWER_USER=%q\nHOME_GATEWAY_MAC=%q\n' "$host" "$mac" "$user" "$gw" > "$BCONF"
+  printf '%s' "$pass" | secret-tool store --label "kissa: Tower (rest-server)" kissa tower
+  if [[ -z $(secret backup-repo) ]]; then
+    repo=$(head -c 24 /dev/urandom | base64 | tr -d '/+=' | cut -c1-28)
+    printf '%s' "$repo" | secret-tool store --label "kissa: Backup-Schlüssel (restic)" kissa backup-repo
+    gum style --border double --border-foreground "$UME" --padding "1 2" \
+      "WICHTIG: Backup-Schlüssel" "" "$repo" "" \
+      "Ohne diesen Schlüssel lässt sich das Backup NIE wieder öffnen." \
+      "Speichere ihn JETZT in Bitwarden (Notiz „kissa backup“)."
+    gum confirm "In Bitwarden gespeichert?" --affirmative "Ja, gespeichert" --negative "Abbrechen" || { warn "Bitte erst speichern"; return 1; }
+  fi
+  restic_env
+  tower_up || { note "Tower nicht erreichbar – ich wecke ihn …"; /usr/libexec/kissa-wol "$mac" >/dev/null; wait_for_tower || return 1; }
+  if restic cat config >/dev/null 2>&1; then ok "Vorhandenes Backup gefunden"
+  else spin "Backup-Speicher anlegen …" restic init && ok "Backup-Speicher angelegt"; fi
+  systemctl --user enable --now kissa-backup.timer >/dev/null 2>&1 || true
+  ok "Automatik aktiv: stündliche Prüfung, Backup einmal am Tag"
+  confirm "Erstes Backup jetzt starten? (dauert beim ersten Mal länger)" && backup_run
+}
+
+wait_for_tower() {
+  local i
+  for i in $(seq 1 72); do tower_up && return 0; sleep 5; done   # bis zu 6 Minuten (Windows fährt hoch)
+  warn "Tower antwortet nicht (Wake-on-LAN im BIOS an? Kabel? IP richtig?)"; return 1
+}
+
+# Vom Timer: nur wenn fällig, zu Hause, Akku ok – und Tower an oder im Weckfenster
+backup_auto() {
+  [[ -f $BCONF ]] || return 0
+  restic_env || return 0
+  local now last age h
+  now=$(date +%s); last=$(last_backup); age=$(( (now - last) / 3600 ))
+  # Erinnerung, wenn es zu lange her ist (höchstens einmal am Tag)
+  if (( age >= 7 * 24 )) && [[ $(cat "$BSTATE/backup-reminded" 2>/dev/null) != "$(date +%F)" ]]; then
+    mkdir -p "$BSTATE" && date +%F > "$BSTATE/backup-reminded"
+    notify "Hoji vermisst ein Backup" "Seit $(( age / 24 )) Tagen keine Sicherung. Sobald du zu Hause bist, geht's automatisch – oder: kissa backup"
+  fi
+  (( age >= 24 )) || return 0
+  if [[ -n ${HOME_GATEWAY_MAC:-} && "$(gateway_mac || true)" != "$HOME_GATEWAY_MAC" ]]; then return 0; fi   # nicht zu Hause
+  local bat; bat=$(cat /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -n1 || true)
+  if [[ -n $bat ]] && grep -q Discharging /sys/class/power_supply/BAT*/status 2>/dev/null && (( bat < 30 )); then return 0; fi
+  if ! tower_up; then
+    h=$(date +%-H)
+    (( h >= WAKE_FROM && h < WAKE_UNTIL )) || return 0
+    notify "Backup" "Hoji weckt den Tower 🐾"
+    /usr/libexec/kissa-wol "$TOWER_MAC" >/dev/null
+    wait_for_tower || { notify "Backup verschoben" "Der Tower ist nicht aufgewacht."; return 0; }
+  fi
+  backup_run || true
+}
+
+cmd_backup() {
+  case "${1:-jetzt}" in
+    einrichten) backup_setup;;
+    auto)       QUIET=1 backup_auto;;
+    jetzt|"")   [[ -f $BCONF ]] || { warn "Noch nicht eingerichtet: kissa backup einrichten"; return 1; }
+                title "Backup"; restic_env
+                if ! tower_up; then note "Tower schläft – ich wecke ihn …"; /usr/libexec/kissa-wol "$TOWER_MAC" >/dev/null; wait_for_tower || return 1; fi
+                note "Sichere dein Home-Verzeichnis …"; backup_run;;
+    status)     [[ -f $BCONF ]] || { warn "Noch nicht eingerichtet: kissa backup einrichten"; return 1; }
+                title "Backup-Status"; restic_env
+                local last; last=$(last_backup)
+                if (( last > 0 )); then ok "Letztes Backup: $(date -d "@$last" '+%d.%m.%Y %H:%M')"; else warn "Noch kein Backup"; fi
+                if tower_up; then restic snapshots --compact --latest 10; else note "Tower ist aus – Liste der Sicherungen gibt's, wenn er läuft."; fi;;
+    holen)      [[ -f $BCONF ]] || { warn "Noch nicht eingerichtet"; return 1; }
+                title "Wiederherstellen"; restic_env
+                tower_up || { /usr/libexec/kissa-wol "$TOWER_MAC" >/dev/null; wait_for_tower || return 1; }
+                local what="${2:-}" target="$HOME/kissa-wiederhergestellt"
+                [[ -n $what ]] || what=$(gum input --header "Was soll zurück? (Pfad, z. B. $HOME/Dokumente – leer = alles)")
+                mkdir -p "$target"
+                restic restore latest --target "$target" ${what:+--include "$what"} \
+                  && ok "Liegt in $target – von dort zurückkopieren, was du brauchst."
+                note "Ältere Stände durchstöbern: restic-Befehle mit kissa backup status ansehen";;
+    *) warn "kissa backup [jetzt|einrichten|status|holen [pfad]]"; return 1;;
+  esac
+}
+
 cmd_setup() {
   # --once: nur beim allerersten Login (Autostart), danach nie wieder automatisch
   if [[ ${1:-} == --once ]]; then
@@ -390,12 +523,12 @@ cmd_menu() {
   local c
   c=$(gum choose --cursor.foreground "$RUST" --selected.foreground "$ACCENT" \
       "🍵 Status" "⬆️  Update" "↩️  Rollback" "🌗 Hell / Dunkel / Zeit" "🪟 Fenster-Raster" "✨ Transparenz an/aus" \
-      "💡 Windows-Spickzettel" "🐾 Systeminfo" "📦 Anderes Linux (Box)" "⎈  K8s-Lab starten" "🧹 K8s-Lab stoppen" "Beenden") || return 0
+      "💾 Backup jetzt" "💡 Windows-Spickzettel" "🐾 Systeminfo" "📦 Anderes Linux (Box)" "⎈  K8s-Lab starten" "🧹 K8s-Lab stoppen" "Beenden") || return 0
   case $c in
     *Status*) cmd_status;; *Update*) cmd_update;; *Rollback*) cmd_rollback;;
     *Dunkel*) cmd_modus;; *Raster*) cmd_fenster;;
     *Transparenz*) if gum confirm "Transparenz einschalten?"; then cmd_glass an; else cmd_glass aus; fi;;
-    *Spickzettel*) cmd_tipps;; *Systeminfo*) fastfetch;; *Box*) cmd_box;;
+    *Backup*) cmd_backup jetzt;; *Spickzettel*) cmd_tipps;; *Systeminfo*) fastfetch;; *Box*) cmd_box;;
     *starten*) cmd_lab up;; *stoppen*) cmd_lab down;;
   esac
 }
@@ -411,6 +544,7 @@ case "${1:-}" in
   fenster)     shift; cmd_fenster "${1:-}";;
   tipps)       shift; cmd_tipps "${1:-}";;
   tipp)        cmd_tipp;;
+  backup)      shift; cmd_backup "$@";;
   info)        fastfetch;;
   tee)         shift; pandasay "$@";;
   box)         shift; cmd_box "${1:-}";;

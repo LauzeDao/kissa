@@ -1,0 +1,10 @@
+[Unit]
+Description=kissa: stündlich prüfen, ob ein Backup fällig ist
+
+[Timer]
+OnStartupSec=5min
+OnUnitActiveSec=1h
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

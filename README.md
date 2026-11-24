@@ -14,6 +14,7 @@ Mein eigenes Linux: Fedora Atomic mit KDE Plasma, gebaut als bootc-Container-Ima
 - **Icons:** `kissa-matcha` / `kissa-hojicha` – Papirus, Ordner beim Build auf Matcha-Grün bzw. Sakura-Rosa umgefärbt
 - **Klänge:** Soundtheme `kissa` – leise Kalimba-Töne in japanischer Pentatonik und Papiergeräusche (`tools/gen_sounds.py`)
 - **Fenster-Raster:** `kissa fenster halb|fokus|mitte|drei|raster|stapel` schreibt KWin-Kachel-Layouts; Fenster mit Umschalt ziehen
+- **Backup:** `kissa backup` – restic auf den Windows-Tower (rest-server, append-only). Stündliche Prüfung, Sicherung einmal am Tag, nur im Heimnetz; weckt den Tower per Wake-on-LAN (8–20 Uhr), der fährt danach selbst wieder herunter. Tower-Einrichtung: `tools/tower/kissa-tower.ps1`
 - **Umstieg:** `kissa tipps [wort]` – Windows → Linux-Spickzettel, im ersten Terminal ein Tipp des Tages
 - **Mauszeiger:** eigenes Theme `kissa-cursors` – Pfeil, Pfötchen als Klick-Hand, Matcha-Schale beim Warten
 - **Transparenz:** Fenster leicht durchscheinend (aktiv 96 %, inaktiv 88 %), Menüs 90 %, Blur – an/aus mit `kissa glas`

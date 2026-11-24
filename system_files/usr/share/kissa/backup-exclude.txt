@@ -1,0 +1,20 @@
+# kissa backup – was NICHT gesichert wird (restic --exclude-file)
+# Zwischenspeicher, Papierkorb, Container-Images und VMs lassen sich neu laden bzw. sind zu groß.
+/home/*/.cache
+/home/*/.local/share/Trash
+/home/*/.local/share/containers
+/home/*/.local/share/libvirt
+/home/*/.local/share/gnome-boxes
+/home/*/.var/app/*/cache
+/home/*/.var/app/*/.cache
+/home/*/.mozilla/firefox/*/cache2
+/home/*/.config/Code/Cache*
+/home/*/.config/Code/CachedData
+/home/*/.npm/_cacache
+/home/*/.cargo/registry
+/home/*/go/pkg/mod
+/home/*/.kube/cache
+/home/*/kissa-wiederhergestellt
+node_modules
+__pycache__
+.venv

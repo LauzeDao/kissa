@@ -1,0 +1,9 @@
+[Unit]
+Description=kissa: Backup auf den Tower (wenn fällig und zu Hause)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kissa backup auto
+Nice=10
+IOSchedulingClass=idle
