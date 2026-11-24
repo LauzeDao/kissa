@@ -8,7 +8,7 @@ name: build kissa
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md", "assets/**", "tools/**"]
+    paths-ignore: ["**.md", "assets/**"]
   pull_request:
     branches: [main]
   schedule:

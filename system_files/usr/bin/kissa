@@ -62,10 +62,14 @@ cmd_theme() {
   case $t in matcha|hojicha) ;; *) warn "Unbekanntes Theme: $t (matcha oder hojicha)"; return 1;; esac
   title "Theme → $t"
   local Name="Kissa${t^}"
-  has plasma-apply-colorscheme    && plasma-apply-colorscheme "$Name" >/dev/null && ok "Desktop-Farben"
-  # Das Wallpaper-Paket hat eine helle und eine dunkle Variante, Plasma wählt passend zum Farbschema.
-  [[ -d $WALLPAPERS ]] && has plasma-apply-wallpaperimage \
-    && plasma-apply-wallpaperimage "$WALLPAPERS" >/dev/null && ok "Hintergrundbild"
+  if has plasma-apply-colorscheme; then
+    if plasma-apply-colorscheme "$Name" >/dev/null 2>&1; then ok "Desktop-Farben"; else warn "Desktop-Farben nicht gesetzt (plasma-apply-colorscheme $Name)"; fi
+  fi
+  local img="$WALLPAPERS/contents/images/3840x2160.png"
+  [[ $t == hojicha ]] && img="$WALLPAPERS/contents/images_dark/3840x2160.png"
+  if [[ -f $img ]] && has plasma-apply-wallpaperimage; then
+    if plasma-apply-wallpaperimage "$img" >/dev/null 2>&1; then ok "Hintergrundbild"; else warn "Hintergrundbild nicht gesetzt (läuft Plasma?)"; fi
+  fi
   mkdir -p "$CONF/kissa" && echo "$t" > "$CONF/kissa/theme"
   ln -sf "$KISSA_SHARE/hoji-$t.ansi" "$CONF/kissa/hoji.ansi" && ok "Hoji im Terminal"
   local key; [[ $t == hojicha ]] && key="38;2;240;182;193" || key="38;2;122;154;79"
@@ -94,7 +98,15 @@ cmd_lab() {
 
 cmd_setup() {
   # --once: nur beim allerersten Login (Autostart), danach nie wieder automatisch
-  if [[ ${1:-} == --once && -f $CONF/kissa/theme ]]; then return 0; fi
+  if [[ ${1:-} == --once ]]; then
+    [[ -f $CONF/kissa/setup-done ]] && return 0
+    mkdir -p "$CONF/kissa" "${XDG_CACHE_HOME:-$HOME/.cache}"
+    exec >>"${XDG_CACHE_HOME:-$HOME/.cache}/kissa-setup.log" 2>&1
+    echo "--- $(date) kissa setup --once"
+    # Warten, bis der Plasma-Desktop läuft – sonst greifen Wallpaper und Farben ins Leere
+    for _ in $(seq 1 60); do pgrep -u "$USER" -x plasmashell >/dev/null && break; sleep 1; done
+    sleep 5
+  fi
   title "Einrichtung"
   mkdir -p "$CONF/fastfetch" "$CONF/kissa"
   if [[ ! -f $CONF/fastfetch/config.jsonc ]]; then cp "$KISSA_SHARE/skel/fastfetch/config.jsonc" "$CONF/fastfetch/" && ok "fastfetch"; fi
@@ -106,6 +118,7 @@ cmd_setup() {
   fi
   local t; t="$(cat "$CONF/kissa/theme" 2>/dev/null || echo matcha)"
   cmd_theme "$t"
+  touch "$CONF/kissa/setup-done"
 }
 
 cmd_menu() {

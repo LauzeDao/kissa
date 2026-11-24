@@ -32,7 +32,8 @@ format = "[($all_status$ahead_behind )]($style)"
 [kubernetes]
 disabled = false
 style = "fg:indigo bold"
-format = "[⎈ $context( \($namespace\))]($style) "
+# Literal-String (einfache Anführungszeichen), damit \( nicht als TOML-Escape gilt
+format = '[⎈ $context( \($namespace\))]($style) '
 
 [cmd_duration]
 min_time = 2000
