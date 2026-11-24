@@ -38,6 +38,26 @@ dnf5 install -y \
   plymouth-plugin-script \
   sddm sddm-breeze sddm-kcm sddm-wayland-plasma
 
+# ---------- Container: Podman mit Docker-Kompatibilität ----------
+# "docker ..." und "docker compose" laufen über Podman (kein Docker Desktop nötig).
+# Grafische Oberfläche: Podman Desktop (Flatpak, siehe flatpaks.list).
+dnf5 install -y podman-docker podman-compose
+touch /etc/containers/nodocker   # unterdrückt den Hinweis "Emulate Docker CLI using podman"
+
+# ---------- VS Code (RPM aus dem Microsoft-Repo, besser als Flatpak für Dev-Container) ----------
+rpm --import https://packages.microsoft.com/keys/microsoft.asc
+cat > /etc/yum.repos.d/vscode.repo <<'EOF'
+[code]
+name=Visual Studio Code
+baseurl=https://packages.microsoft.com/yumrepos/vscode
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.microsoft.com/keys/microsoft.asc
+EOF
+dnf5 install -y code
+# Repo danach abschalten: Updates kommen über den täglichen Image-Build
+sed -i 's/^enabled=1/enabled=0/' /etc/yum.repos.d/vscode.repo
+
 # ---------- Tools als gepinnte Releases ----------
 # starship (Prompt)
 f=starship-${ARCH}-unknown-linux-gnu.tar.gz
@@ -100,7 +120,8 @@ grep -v '^\s*#' /ctx/cursor-aliases.txt | while read -r target aliases; do
 done
 
 # ---------- Sonstiges ----------
-chmod 0755 /usr/bin/kissa /usr/bin/pandasay
+chmod 0755 /usr/bin/kissa /usr/bin/pandasay /usr/libexec/kissa-flatpaks
+systemctl enable kissa-flatpaks.service
 sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="kissa (Fedora Atomic · Aurora)"/' /usr/lib/os-release
 
 rm -rf "$TMP"

@@ -16,6 +16,8 @@ Mein eigenes Linux: Fedora Atomic mit KDE Plasma, gebaut als bootc-Container-Ima
 - **Login:** SDDM mit Breeze und Hoji-Hintergrund (statt Plasma Login Manager, der keine eigenen Themes kann)
 - **Terminal:** Konsole-Profile und -Farben, Starship-Prompt mit Git- und Kubernetes-Kontext, fastfetch mit Pixel-Hoji
 - **CLI:** `kissa` (Menü, Update, Rollback, Theme-Wechsel, K8s-Lab) und `pandasay` / `ocha`
+- **Apps:** VS Code (RPM), Podman mit Docker-Kompatibilität (`docker`, `docker compose`) + Podman Desktop, LibreOffice, Obsidian, Firefox – Flatpaks installiert `kissa-flatpaks.service` beim Start aus `system_files/usr/share/kissa/flatpaks.list`
+- **Firefox:** uBlock Origin, DuckDuckGo als Suche, Telemetrie/Pocket/Werbung aus, strenger Tracking-Schutz (`firefox-policies.json`)
 - **Tools:** starship, gum, kind, kubectl, k9s, JetBrainsMono Nerd Font (gepinnt in `build_files/versions.env`, mit Checksummenprüfung)
 
 ## Aufbau

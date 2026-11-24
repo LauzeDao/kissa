@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 fail=0
 
-for f in build_files/build.sh system_files/usr/bin/kissa system_files/usr/bin/pandasay system_files/usr/share/kissa/bashrc-kissa.sh; do
+for f in build_files/build.sh system_files/usr/libexec/kissa-flatpaks system_files/usr/bin/kissa system_files/usr/bin/pandasay system_files/usr/share/kissa/bashrc-kissa.sh; do
   if bash -n "$f"; then echo "ok   bash  $f"; else echo "FAIL bash  $f"; fail=1; fi
 done
 

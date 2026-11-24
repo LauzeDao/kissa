@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# kissa – installiert die Standard-Apps (Flatpak) und richtet Firefox ein.
+# Läuft bei jedem Start als Systemdienst, arbeitet aber nur, wenn sich die
+# App-Liste oder die Firefox-Vorgaben seit dem letzten erfolgreichen Lauf geändert haben.
+set -euo pipefail
+
+LIST=/usr/share/kissa/flatpaks.list
+POLICIES=/usr/share/kissa/firefox-policies.json
+STATE=/var/lib/kissa/flatpaks.done
+FF_POLICY_DIR=/var/lib/flatpak/extension/org.mozilla.firefox.systemconfig/x86_64/stable/policies
+
+want=$(cat "$LIST" "$POLICIES" | sha256sum | cut -d' ' -f1)
+if [[ -f $STATE && $(cat "$STATE") == "$want" ]]; then
+  echo "kissa-flatpaks: nichts zu tun"
+  exit 0
+fi
+
+# Firefox-Vorgaben (uBlock Origin, DuckDuckGo, Datenschutz) – greifen beim nächsten Firefox-Start
+mkdir -p "$FF_POLICY_DIR"
+install -m 0644 "$POLICIES" "$FF_POLICY_DIR/policies.json"
+echo "kissa-flatpaks: Firefox-Vorgaben gesetzt"
+
+flatpak remote-add --system --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+failed=0
+while read -r app; do
+  [[ -z $app || $app == \#* ]] && continue
+  if flatpak info --system "$app" >/dev/null 2>&1; then
+    echo "kissa-flatpaks: $app ist schon da"
+  elif flatpak install --system --noninteractive --assumeyes flathub "$app"; then
+    echo "kissa-flatpaks: $app installiert"
+  else
+    echo "kissa-flatpaks: $app FEHLGESCHLAGEN" >&2
+    failed=1
+  fi
+done < "$LIST"
+
+# Nur bei vollem Erfolg merken – sonst beim nächsten Start erneut versuchen
+if [[ $failed == 0 ]]; then
+  mkdir -p "$(dirname "$STATE")"
+  echo "$want" > "$STATE"
+fi
+exit $failed

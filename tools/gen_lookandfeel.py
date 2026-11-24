@@ -87,6 +87,7 @@ name=default
 
 [kcminputrc][Mouse]
 cursorTheme=kissa-cursors
+cursorSize=32
 
 [kwinrc][org.kde.kdecoration2]
 library=org.kde.breeze

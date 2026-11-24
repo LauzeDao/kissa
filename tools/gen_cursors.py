@@ -40,7 +40,11 @@ def P(pts, s):
 
 
 def outlined_polygon(d, pts, s, fill, w):
-    d.polygon(P(pts, s), fill=fill, outline=INK, width=max(1, int(w)))
+    """Heller Rand außen + dunkle Kontur innen: auf hellem und dunklem Grund gut sichtbar."""
+    path = P(pts + [pts[0], pts[1]], s)
+    d.line(path, fill=CREAM, width=max(1, int(w * 3.2)), joint="curve")   # heller Rand nach außen
+    d.polygon(P(pts, s), fill=fill)
+    d.line(path, fill=INK, width=max(1, int(w)), joint="curve")           # dunkle Kontur
 
 
 # ---------- einzelne Zeiger (Koordinaten 0..1 relativ zur Größe) ----------
@@ -49,9 +53,10 @@ ARROW = [(0.10, 0.06), (0.10, 0.80), (0.29, 0.63), (0.43, 0.92), (0.56, 0.86), (
 
 def arrow(size):
     img, d, s = canvas(size)
-    outlined_polygon(d, ARROW, s, CREAM, s * 0.065)
-    # kleiner Sakura-Punkt als kawaii-Detail
-    d.ellipse(P([(0.17, 0.42), (0.25, 0.50)], s), fill=BEAN)
+    outlined_polygon(d, ARROW, s, RUST, s * 0.06)
+    # Glanzlicht und Sakura-Bäckchen als kawaii-Detail
+    d.line(P([(0.17, 0.20), (0.17, 0.52)], s), fill=(255, 236, 214, 200), width=int(s * 0.04))
+    d.ellipse(P([(0.20, 0.50), (0.30, 0.60)], s), fill=BEAN)
     return finish(img, size), (round(0.11 * size), round(0.07 * size))
 
 
@@ -59,16 +64,20 @@ def paw(size, closed=False):
     img, d, s = canvas(size)
     w = s * 0.055
     cy = 0.62 if not closed else 0.66
-    # Hauptballen
-    d.ellipse(P([(0.26, cy - 0.16), (0.74, cy + 0.22)], s), fill=CREAM, outline=INK, width=int(w))
-    d.ellipse(P([(0.36, cy - 0.04), (0.64, cy + 0.14)], s), fill=BEAN)
-    # Zehen
     toes = [(0.24, 0.34), (0.40, 0.20), (0.60, 0.20), (0.76, 0.34)] if not closed else \
            [(0.30, 0.42), (0.43, 0.34), (0.57, 0.34), (0.70, 0.42)]
     r = 0.105 if not closed else 0.09
+    main = [(0.26, cy - 0.16), (0.74, cy + 0.22)]
+    rim = 0.045
+    # 1. heller Rand hinter allem, 2. dunkle Ballen, 3. rosa Bohnen
+    d.ellipse(P([(main[0][0] - rim, main[0][1] - rim), (main[1][0] + rim, main[1][1] + rim)], s), fill=CREAM)
     for tx, ty in toes:
-        d.ellipse(P([(tx - r, ty - r), (tx + r, ty + r)], s), fill=CREAM, outline=INK, width=int(w))
-        d.ellipse(P([(tx - r * 0.45, ty - r * 0.3), (tx + r * 0.45, ty + r * 0.5)], s), fill=BEAN)
+        d.ellipse(P([(tx - r - rim, ty - r - rim), (tx + r + rim, ty + r + rim)], s), fill=CREAM)
+    d.ellipse(P(main, s), fill=PAD)
+    d.ellipse(P([(0.36, cy - 0.04), (0.64, cy + 0.14)], s), fill=BEAN)
+    for tx, ty in toes:
+        d.ellipse(P([(tx - r, ty - r), (tx + r, ty + r)], s), fill=PAD)
+        d.ellipse(P([(tx - r * 0.5, ty - r * 0.35), (tx + r * 0.5, ty + r * 0.55)], s), fill=BEAN)
     hot = (round(0.50 * size), round(0.12 * size)) if not closed else (round(0.5 * size), round(0.3 * size))
     return finish(img, size), hot
 
@@ -96,7 +105,7 @@ def bowl(d, s, cx, cy, scale):
 def spinner_frame(size, phase, with_arrow=False):
     img, d, s = canvas(size)
     if with_arrow:
-        outlined_polygon(d, [(x * 0.72, y * 0.72) for x, y in ARROW], s, CREAM, s * 0.05)
+        outlined_polygon(d, [(x * 0.72, y * 0.72) for x, y in ARROW], s, RUST, s * 0.045)
         cx, cy, R, sc = 0.70, 0.70, 0.22, 0.55
     else:
         cx, cy, R, sc = 0.5, 0.5, 0.38, 1.0
@@ -140,7 +149,7 @@ def double_arrow(size, angle, four=False):
     for a in angles:
         r = math.radians(a)
         pts = [(0.5 + x * math.cos(r) - y * math.sin(r), 0.5 + x * math.sin(r) + y * math.cos(r)) for x, y in shaft]
-        outlined_polygon(d, pts, s, CREAM, s * 0.05)
+        outlined_polygon(d, pts, s, RUST, s * 0.045)
     return finish(img, size), (size // 2, size // 2)
 
 

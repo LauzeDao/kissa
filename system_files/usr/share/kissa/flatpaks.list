@@ -1,0 +1,7 @@
+# Standard-Apps für kissa (Flathub). Eine App-ID pro Zeile.
+# Werden beim Start vom Dienst kissa-flatpaks.service systemweit installiert.
+# Neue Zeile hinzufügen + Image neu bauen = App kommt beim nächsten Start automatisch.
+org.mozilla.firefox
+org.libreoffice.LibreOffice
+md.obsidian.Obsidian
+io.podman_desktop.PodmanDesktop

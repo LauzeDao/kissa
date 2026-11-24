@@ -1,0 +1,15 @@
+[Unit]
+Description=kissa: Standard-Apps installieren und Firefox einrichten
+Documentation=https://github.com/LauzeDao/kissa
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/kissa-flatpaks
+# Bei Fehlern (z. B. kein Netz) später nochmal versuchen
+Restart=on-failure
+RestartSec=5min
+
+[Install]
+WantedBy=multi-user.target
