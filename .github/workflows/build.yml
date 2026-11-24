@@ -155,7 +155,8 @@ jobs:
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
           COSIGN_PASSWORD: ""
-        run: cosign attest --yes --key env://COSIGN_PRIVATE_KEY --type spdxjson --predicate sbom.spdx.json "${IMAGE}@${DIGEST}"
+        # Ohne Transparenz-Log: die SBOM (mehrere MB) ist zu groß für Rekor, die Signatur mit unserem Schlüssel reicht
+        run: cosign attest --yes --tlog-upload=false --key env://COSIGN_PRIVATE_KEY --type spdxjson --predicate sbom.spdx.json "${IMAGE}@${DIGEST}"
 
       - name: Scan-Ergebnisse nach GitHub (Code scanning)
         if: github.event_name != 'pull_request' && steps.scan.outcome == 'success'

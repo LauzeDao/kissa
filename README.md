@@ -61,7 +61,7 @@ SBOM, Scan und Änderungsprotokoll berichten nur, sie blockieren kein Update.
 Signierte SBOM prüfen:
 
 ```bash
-cosign verify-attestation --key cosign.pub --type spdxjson ghcr.io/lauzedao/kissa:latest > /dev/null
+cosign verify-attestation --insecure-ignore-tlog=true --key cosign.pub --type spdxjson ghcr.io/lauzedao/kissa:latest > /dev/null
 ```
 
 **Eigenes ISO:** `iso.yml` (manuell unter *Actions → iso kissa → Run workflow*) prüft die Signatur des aktuellen Images und baut daraus mit bootc-image-builder ein Installer-ISO (`disk_config/iso.toml`). Download als Artefakt `kissa-iso`, 3 Tage verfügbar. Nach der Installation zeigt das System direkt auf `ghcr.io/lauzedao/kissa` – mit Signaturprüfung.
