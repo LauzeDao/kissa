@@ -119,6 +119,24 @@ grep -v '^\s*#' /ctx/cursor-aliases.txt | while read -r target aliases; do
   for a in $aliases; do ln -sf "$target" "$CURSORS/$a"; done
 done
 
+# ---------- Härtung ----------
+# 1. Updates nur mit gültiger Signatur: Regel für unser Image in die bestehende
+#    policy.json einfügen (Aurora bringt dort schon eigene Regeln mit).
+install -D -m 0644 /ctx/cosign.pub /etc/pki/containers/kissa.pub
+jq '.transports.docker["ghcr.io/lauzedao/kissa"] = [{
+      "type": "sigstoreSigned",
+      "keyPath": "/etc/pki/containers/kissa.pub",
+      "signedIdentity": {"type": "matchRepository"}
+    }]' /etc/containers/policy.json > /tmp/policy.json
+mv /tmp/policy.json /etc/containers/policy.json
+jq -e '.transports.docker["ghcr.io/lauzedao/kissa"]' /etc/containers/policy.json >/dev/null
+
+# 2. Firewall: eigene Zone "kissa" als Standard (eingehend zu, außer mDNS + KDE Connect)
+firewall-offline-cmd --set-default-zone=kissa
+
+# 3. SSH-Server aus (privat nicht gebraucht)
+systemctl disable sshd.service 2>/dev/null || true
+
 # ---------- Sonstiges ----------
 chmod 0755 /usr/bin/kissa /usr/bin/pandasay /usr/libexec/kissa-flatpaks
 systemctl enable kissa-flatpaks.service

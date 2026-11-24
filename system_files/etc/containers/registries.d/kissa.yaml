@@ -1,0 +1,4 @@
+# kissa: Signaturen (cosign) liegen als Anhang neben dem Image in der Registry
+docker:
+  ghcr.io/lauzedao/kissa:
+    use-sigstore-attachments: true

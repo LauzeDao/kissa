@@ -20,6 +20,23 @@ Mein eigenes Linux: Fedora Atomic mit KDE Plasma, gebaut als bootc-Container-Ima
 - **Firefox:** uBlock Origin, DuckDuckGo als Suche, Telemetrie/Pocket/Werbung aus, strenger Tracking-Schutz (`firefox-policies.json`)
 - **Tools:** starship, gum, kind, kubectl, k9s, JetBrainsMono Nerd Font (gepinnt in `build_files/versions.env`, mit Checksummenprüfung)
 
+## Sicherheit
+
+| Maßnahme | Umsetzung |
+|---|---|
+| Signierte Updates | Pipeline signiert mit cosign (Schlüssel als Secret `SIGNING_SECRET`, öffentlicher Teil `cosign.pub`). Das Image enthält eine Regel in `/etc/containers/policy.json`, die nur korrekt signierte Images von `ghcr.io/lauzedao/kissa` annimmt. |
+| Firewall | Eigene Zone `kissa`: eingehend nur DHCPv6, mDNS und KDE Connect (1714–1764) |
+| Kernel | `sysctl`-Härtung in `/usr/lib/sysctl.d/60-kissa-hardening.conf` |
+| Dienste | SSH-Server deaktiviert |
+| Lieferkette | Actions per Commit-Hash gepinnt (Dependabot hält sie aktuell), Tool-Downloads mit Checksummenprüfung |
+| Passwörter | Bitwarden (EU-Server), Firefox-Passwortspeicher aus |
+
+Einmalig nach dem ersten Image mit Signaturregel auf geprüfte Updates umstellen:
+
+```bash
+sudo bootc switch --enforce-container-sigpolicy ghcr.io/lauzedao/kissa:latest
+```
+
 ## Aufbau
 
 ```

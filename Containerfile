@@ -4,6 +4,7 @@
 
 FROM scratch AS ctx
 COPY build_files /
+COPY cosign.pub /cosign.pub
 
 FROM ghcr.io/ublue-os/aurora:stable
 

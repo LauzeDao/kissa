@@ -30,15 +30,14 @@ jobs:
     permissions:
       contents: read
       packages: write # Push nach ghcr.io
-      id-token: write # Keyless-Signatur mit cosign (GitHub OIDC)
     steps:
       - name: Speicherplatz freimachen (das Image ist groß)
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         with:
           tool-cache: true
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Konfiguration prüfen (bash, TOML, JSON)
         run: bash tools/check.sh
@@ -76,11 +75,21 @@ jobs:
 
       - name: cosign installieren
         if: github.event_name != 'pull_request'
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+        with:
+          # v2 signiert im klassischen Format, das podman/bootc auf dem Laptop prüfen kann
+          cosign-release: v2.6.5
 
-      - name: Image signieren (keyless)
+      - name: Image signieren
         if: github.event_name != 'pull_request'
-        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_PASSWORD: ""
+        run: cosign sign --yes --key env://COSIGN_PRIVATE_KEY "${IMAGE}@${DIGEST}"
+
+      - name: Signatur prüfen (wie später der Laptop)
+        if: github.event_name != 'pull_request'
+        run: cosign verify --key cosign.pub "${IMAGE}@${DIGEST}" > /dev/null && echo "Signatur gültig"
 
       - name: Zusammenfassung
         if: github.event_name != 'pull_request'

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- kissa: eingehend ist alles zu, außer dem, was ein Laptop im Heimnetz wirklich braucht -->
+<zone>
+  <short>kissa</short>
+  <description>kissa: eingehend nur DHCPv6, mDNS (Drucker und Geräte im Heimnetz) und KDE Connect (1714–1764).</description>
+  <service name="dhcpv6-client"/>
+  <service name="mdns"/>
+  <port protocol="tcp" port="1714-1764"/>
+  <port protocol="udp" port="1714-1764"/>
+  <forward/>
+</zone>
