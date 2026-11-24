@@ -9,7 +9,9 @@ Mein eigenes Linux: Fedora Atomic mit KDE Plasma, gebaut als bootc-Container-Ima
 
 ## Was drin ist
 
-- **Desktop:** KDE-Farbschemata `KissaMatcha` / `KissaHojicha`, Wallpaper-Paket `Kissa` (hell und dunkel)
+- **Desktop:** KDE Global Themes `org.kissa.matcha` / `org.kissa.hojicha` mit Seitenleiste links + Notch oben, Farbschemata, Wallpaper-Paket `Kissa` (hell und dunkel), Hoji-Ladebildschirm nach dem Login
+- **Mauszeiger:** eigenes Theme `kissa-cursors` – Pfeil, Pfötchen als Klick-Hand, Matcha-Schale beim Warten
+- **Transparenz:** Fenster leicht durchscheinend (aktiv 96 %, inaktiv 88 %), Menüs 90 %, Blur – an/aus mit `kissa glas`
 - **Bootsplash:** Plymouth-Theme `kissa` mit Hoji, Laterne und Ladepunkten, inkl. Passwortabfrage für verschlüsselte Platten
 - **Login:** SDDM mit Breeze und Hoji-Hintergrund (statt Plasma Login Manager, der keine eigenen Themes kann)
 - **Terminal:** Konsole-Profile und -Farben, Starship-Prompt mit Git- und Kubernetes-Kontext, fastfetch mit Pixel-Hoji
@@ -48,6 +50,8 @@ Nach dem ersten Login richtet `kissa setup` Terminal, Prompt und Theme automatis
 python tools/gen_wallpaper.py <ordner>        # SVGs: Wallpaper + freigestellter Hoji (im Browser zu PNG rendern)
 python tools/sprite.py <ordner>               # Pixel-Hoji fürs Terminal (.ansi)
 python tools/gen_kde_colors.py system_files/usr/share/color-schemes
+python tools/gen_cursors.py system_files/usr/share/icons/kissa-cursors
+python tools/gen_lookandfeel.py system_files/usr/share/plasma/look-and-feel
 python tools/gen_plymouth.py assets/hoji-hojicha.png system_files/usr/share/plymouth/themes/kissa
 ```
 

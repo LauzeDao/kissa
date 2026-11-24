@@ -19,4 +19,11 @@ while IFS= read -r f; do
     echo "ok   json  $f"; else echo "FAIL json  $f"; fail=1; fi
 done < <(find system_files -name '*.json' -o -name '*.jsonc')
 
+# Plasma-Layout-Skripte (JavaScript) – nur Syntax, wenn node vorhanden ist
+if command -v node >/dev/null; then
+  while IFS= read -r f; do
+    if node --check "$f" 2>/dev/null; then echo "ok   js    $f"; else echo "FAIL js    $f"; fail=1; fi
+  done < <(find system_files -name '*.js')
+fi
+
 exit $fail

@@ -34,6 +34,7 @@ install_from_tar() {
 # ---------- Pakete aus den Fedora-Repos ----------
 dnf5 install -y \
   fastfetch \
+  konsole \
   plymouth-plugin-script \
   sddm sddm-breeze sddm-kcm sddm-wayland-plasma
 
@@ -89,6 +90,14 @@ plymouth-set-default-theme kissa
 # Initramfs neu bauen, damit der Bootsplash schon vor dem Root-Dateisystem verfügbar ist.
 KVER=$(ls /usr/lib/modules | head -n1)
 dracut --no-hostonly --kver "$KVER" --reproducible --zstd -v --add ostree -f "/usr/lib/modules/$KVER/initramfs.img"
+
+# ---------- Mauszeiger: Alias-Namen als Symlinks ----------
+CURSORS=/usr/share/icons/kissa-cursors/cursors
+grep -v '^\s*#' /ctx/cursor-aliases.txt | while read -r target aliases; do
+  [[ -z $target ]] && continue
+  [[ -f $CURSORS/$target ]] || { echo "Zeiger fehlt: $target" >&2; exit 1; }
+  for a in $aliases; do ln -sf "$target" "$CURSORS/$a"; done
+done
 
 # ---------- Sonstiges ----------
 chmod 0755 /usr/bin/kissa /usr/bin/pandasay

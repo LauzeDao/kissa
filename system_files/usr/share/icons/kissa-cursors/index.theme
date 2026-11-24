@@ -1,0 +1,4 @@
+[Icon Theme]
+Name=kissa
+Comment=Hoji-Mauszeiger für kissa
+Inherits=breeze_cursors

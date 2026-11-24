@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "kissa"
+            }
+        ],
+        "Category": "",
+        "Description": "Heller Paperlook mit Matcha-Akzent",
+        "Id": "org.kissa.matcha",
+        "License": "GPL-2.0-or-later",
+        "Name": "kissa Matcha",
+        "Version": "1.0"
+    },
+    "X-Plasma-APIVersion": "2"
+}

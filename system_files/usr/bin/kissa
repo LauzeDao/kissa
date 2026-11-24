@@ -9,6 +9,8 @@
 #   kissa tee [text]      Der Panda sagt etwas
 #   kissa lab up|down     Lokalen Kubernetes-Cluster (kind) starten/stoppen
 #   kissa setup           Terminal, Prompt und Theme für deinen Benutzer einrichten
+#   kissa layout          Seitenleiste + Notch wiederherstellen
+#   kissa glas an|aus     Leichte Transparenz für Fenster und Menüs
 set -euo pipefail
 
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -61,9 +63,16 @@ cmd_theme() {
   fi
   case $t in matcha|hojicha) ;; *) warn "Unbekanntes Theme: $t (matcha oder hojicha)"; return 1;; esac
   title "Theme → $t"
-  local Name="Kissa${t^}"
-  if has plasma-apply-colorscheme; then
-    if plasma-apply-colorscheme "$Name" >/dev/null 2>&1; then ok "Desktop-Farben"; else warn "Desktop-Farben nicht gesetzt (plasma-apply-colorscheme $Name)"; fi
+  # Global Theme: Farben, Mauszeiger, Fensterrahmen, Ladebildschirm (Layout nur mit --layout)
+  local laf_args=(-a "org.kissa.$t")
+  [[ ${2:-} == --layout ]] && laf_args+=(--resetLayout)
+  if has plasma-apply-lookandfeel && plasma-apply-lookandfeel "${laf_args[@]}" >/dev/null 2>&1; then
+    ok "Desktop-Theme (Farben, Mauszeiger, Ladebildschirm)"
+    [[ ${2:-} == --layout ]] && ok "Seitenleiste + Notch"
+  elif has plasma-apply-colorscheme && plasma-apply-colorscheme "Kissa${t^}" >/dev/null 2>&1; then
+    ok "Desktop-Farben"; warn "Global Theme org.kissa.$t nicht angewendet, nur die Farben"
+  else
+    warn "Desktop-Theme nicht gesetzt (läuft Plasma?)"
   fi
   local img="$WALLPAPERS/contents/images/3840x2160.png"
   [[ $t == hojicha ]] && img="$WALLPAPERS/contents/images_dark/3840x2160.png"
@@ -116,20 +125,62 @@ cmd_setup() {
       "$KISSA_SHARE" "$KISSA_SHARE" >> "$HOME/.bashrc"
     ok "bash"
   fi
+  if has kwriteconfig6; then
+    kwriteconfig6 --file kdeglobals --group General --key TerminalApplication konsole
+    kwriteconfig6 --file kdeglobals --group General --key TerminalService org.kde.konsole.desktop
+    ok "Konsole als Standard-Terminal"
+  fi
+  cmd_glass an
   local t; t="$(cat "$CONF/kissa/theme" 2>/dev/null || echo matcha)"
-  cmd_theme "$t"
+  cmd_theme "$t" --layout
   touch "$CONF/kissa/setup-done"
 }
 
+# Leichte Transparenz für Fenster und Menüs (KWin), Blur dahinter
+cmd_glass() {
+  local mode="${1:-an}" r=kwinrulesrc g=kissa-transparenz rules
+  has kwriteconfig6 || { warn "kwriteconfig6 fehlt"; return 1; }
+  rules=$(kreadconfig6 --file "$r" --group General --key rules 2>/dev/null || true)
+  case $mode in
+    an)
+      kwriteconfig6 --file kwinrc --group Plugins --key translucencyEnabled true
+      kwriteconfig6 --file kwinrc --group Plugins --key blurEnabled true
+      for key in Menus DropdownMenus PopupMenus ComboboxPopups TornOffMenus; do
+        kwriteconfig6 --file kwinrc --group Effect-translucency --key "$key" 90
+      done
+      kwriteconfig6 --file kwinrc --group Effect-translucency --key Dialogs 95
+      kwriteconfig6 --file kwinrc --group Effect-translucency --key MoveResize 85
+      # Fensterregel für normale Fenster (1) und Dialoge (32): aktiv 96 %, inaktiv 88 %
+      kwriteconfig6 --file "$r" --group "$g" --key Description "kissa: leichte Transparenz"
+      kwriteconfig6 --file "$r" --group "$g" --key types 33
+      kwriteconfig6 --file "$r" --group "$g" --key opacityactive 96
+      kwriteconfig6 --file "$r" --group "$g" --key opacityactiverule 2
+      kwriteconfig6 --file "$r" --group "$g" --key opacityinactive 88
+      kwriteconfig6 --file "$r" --group "$g" --key opacityinactiverule 2
+      if [[ ",$rules," != *",$g,"* ]]; then rules="${rules:+$rules,}$g"; fi
+      ;;
+    aus)
+      kwriteconfig6 --file kwinrc --group Plugins --key translucencyEnabled false
+      rules=$(tr ',' '\n' <<<"$rules" | grep -vx "$g" | paste -sd, - || true)
+      ;;
+    *) warn "kissa glas an | aus"; return 1;;
+  esac
+  kwriteconfig6 --file "$r" --group General --key rules "$rules"
+  kwriteconfig6 --file "$r" --group General --key count "$(tr ',' '\n' <<<"$rules" | grep -c . || true)"
+  dbus-send --session --dest=org.kde.KWin --type=method_call /KWin org.kde.KWin.reconfigure 2>/dev/null || true
+  ok "Transparenz $mode"
+}
+
 cmd_menu() {
-  has gum || { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; return; }
+  has gum || { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; return; }
   pandasay "Was möchtest du tun?" 2>/dev/null || title "Menü"
   local c
   c=$(gum choose --cursor.foreground "$RUST" --selected.foreground "$ACCENT" \
-      "🍵 Status" "⬆️  Update" "↩️  Rollback" "🎨 Theme" "🐾 Systeminfo" "⎈  K8s-Lab starten" "🧹 K8s-Lab stoppen" "Beenden") || return 0
+      "🍵 Status" "⬆️  Update" "↩️  Rollback" "🎨 Theme" "🪟 Transparenz an/aus" "🐾 Systeminfo" "⎈  K8s-Lab starten" "🧹 K8s-Lab stoppen" "Beenden") || return 0
   case $c in
     *Status*) cmd_status;; *Update*) cmd_update;; *Rollback*) cmd_rollback;;
-    *Theme*) cmd_theme;; *Systeminfo*) fastfetch;;
+    *Theme*) cmd_theme;;
+    *Transparenz*) if gum confirm "Transparenz einschalten?"; then cmd_glass an; else cmd_glass aus; fi;; *Systeminfo*) fastfetch;;
     *starten*) cmd_lab up;; *stoppen*) cmd_lab down;;
   esac
 }
@@ -144,6 +195,8 @@ case "${1:-}" in
   tee)         shift; pandasay "$@";;
   lab)         shift; cmd_lab "${1:-up}";;
   setup)       shift; cmd_setup "${1:-}";;
-  -h|--help|help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//';;
-  *)           warn "Unbekannter Befehl: $1"; sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
+  layout)      cmd_theme "$THEME" --layout;;
+  glas)        shift; cmd_glass "${1:-an}";;
+  -h|--help|help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//';;
+  *)           warn "Unbekannter Befehl: $1"; sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
 esac

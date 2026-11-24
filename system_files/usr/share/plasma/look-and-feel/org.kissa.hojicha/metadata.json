@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "kissa"
+            }
+        ],
+        "Category": "",
+        "Description": "Dunkles Hojicha-Braun mit Sakura-Akzent",
+        "Id": "org.kissa.hojicha",
+        "License": "GPL-2.0-or-later",
+        "Name": "kissa Hojicha",
+        "Version": "1.0"
+    },
+    "X-Plasma-APIVersion": "2"
+}
