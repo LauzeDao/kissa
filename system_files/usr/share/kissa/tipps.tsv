@@ -1,0 +1,43 @@
+# Windows	kissa / Linux	Hinweis
+Startmenü (Win-Taste)	Meta-Taste	Meta = die Windows-Taste. Einfach lostippen, um zu suchen
+PowerToys Run / Win+R	Alt+Leertaste (KRunner)	Rechnet, rechnet Einheiten um, sucht Dateien, startet Befehle
+Task-Manager (Strg+Umschalt+Esc)	Strg+Esc oder btop	Strg+Esc öffnet die Systemüberwachung, btop ist die Terminal-Variante
+Explorer	Dolphin	F4 öffnet ein Terminal direkt im Ordner, F3 teilt die Ansicht
+Systemsteuerung / Einstellungen	Systemeinstellungen	Oder im Terminal: systemsettings
+Snipping Tool (Win+Umschalt+S)	Spectacle (Druck-Taste)	Meta+Umschalt+Druck = Bereich auswählen
+Alt+Tab	Alt+Tab	Gleich – Meta+W zeigt alle Fenster als Übersicht
+Virtuelle Desktops (Win+Tab)	Meta+W / Strg+F1…F4	Arbeitsflächen über Systemeinstellungen → Virtuelle Arbeitsflächen
+Fenster andocken (Win+Pfeil)	Meta+Pfeil	Eigene Raster: kissa fenster, dann Umschalt beim Ziehen gedrückt halten
+Snap-Layouts	Meta+T	Kachel-Editor von KDE – kissa fenster bringt fertige Layouts mit
+Windows Update	kissa update	Neues Image wird beim Neustart aktiv – kaputt? kissa rollback
+Systemwiederherstellung	kissa rollback	Ein Klick zurück zum vorherigen Image, immer verfügbar
+Microsoft Store / winget	Discover oder flatpak install	Apps kommen als Flatpak, z. B. flatpak install flathub org.gimp.GIMP
+Programme deinstallieren	flatpak uninstall <app>	Liste: flatpak list --app
+.exe-Installer	Flatpak / AppImage	Für Entwickler-Tools: distrobox (kissa box)
+WSL	kissa box ubuntu	Ein komplettes Ubuntu im Terminal, ohne das System anzufassen
+ipconfig	ip a	Netzwerk-Adressen. Kurz und bunt: ip -br -c a
+ping / tracert	ping / tracepath	mtr zeigt beides live
+nslookup	dig oder resolvectl query	resolvectl status zeigt den DNS-Server
+netstat -ano	ss -tulpn	Netzwerk: Welche Ports sind offen und welches Programm hört?
+tasklist / taskkill	ps aux / kill	pgrep -a firefox findet Prozesse nach Namen
+dir	ls -lah	ll ist in kissa schon als Abkürzung eingerichtet
+type	cat	less zum Blättern, q zum Beenden
+findstr	grep	grep -rn "text" . durchsucht einen ganzen Ordner
+where	which	Oder: type -a befehl
+cls	clear	Oder Strg+L
+Umgebungsvariablen	export NAME=wert	Dauerhaft in ~/.bashrc eintragen
+Dienste (services.msc)	systemctl	systemctl status <dienst>, Logs mit journalctl -u <dienst>
+Ereignisanzeige	journalctl	journalctl -b -p err zeigt Fehler seit dem Start
+Als Administrator ausführen	sudo	sudo !! wiederholt den letzten Befehl mit Rechten
+Laufwerk C:	/ (Wurzel) und /home	Dein Zeug liegt in ~ = /home/<du>
+Programme (x86)	/usr (nur lesbar)	Bei kissa ist /usr unveränderlich – das ist der Witz an bootc
+AppData	~/.config und ~/.local/share	Einstellungen der Apps liegen dort
+Windows Defender Firewall	firewall-cmd	sudo firewall-cmd --list-all zeigt die kissa-Zone
+BitLocker	LUKS	Wird bei der Installation aktiviert, Passwort beim Start
+Remotedesktop	KDE Connect / krdp	Systemeinstellungen → Fernsteuerung
+Credential Manager	Bitwarden + KDE-Wallet	Bitwarden für Passwörter, Wallet für WLAN & Co.
+Docker Desktop	podman / Podman Desktop	docker-Befehle funktionieren trotzdem (umgeleitet auf podman)
+PowerShell	bash	Tab vervollständigt, Strg+R sucht in der Befehls-Historie
+notepad	kate oder nano	Im Terminal: nano datei.txt, Speichern mit Strg+O
+Strg+C im Terminal	Strg+Umschalt+C	Strg+C bricht im Terminal einen Befehl ab
+Hell/Dunkel umschalten	kissa modus	hell, dunkel oder zeit (nach Sonnenstand)

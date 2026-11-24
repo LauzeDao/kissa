@@ -8,6 +8,7 @@ command -v starship >/dev/null && eval "$(starship init bash)"
 if [[ -z ${KISSA_GREETED:-} ]]; then
   export KISSA_GREETED=1
   command -v fastfetch >/dev/null && fastfetch
+  command -v kissa >/dev/null && kissa tipp
 else
   command -v pandasay >/dev/null && pandasay
 fi

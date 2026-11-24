@@ -1,8 +1,15 @@
 """kissa wallpapers v2 – chibi style with outlines, small centered scene, spotlight glow.
 
-matcha  = light: Hoji with a matcha bowl, matcha tea-house sign
-hojicha = dark:  Hoji with a pastel-pink paper lantern, pink sign
+matcha  = light (Tag):   Hoji with a matcha bowl, matcha tea-house sign
+hojicha = dark  (Nacht): Hoji with a pastel-pink paper lantern, pink sign
+Jahreszeiten: fruehling (Kirschblüten), sommer (Sonne / Glühwürmchen),
+              herbst (Ahornblätter, Vollmond), winter (Schnee, Schal)
+
 usage: python gen_wallpaper.py <out_dir>
+  -> "kissa wallpaper <theme>.svg"   (Original)
+  -> "kissa <season> <theme>.svg"    (8 Jahreszeiten-Varianten)
+  -> "hoji <theme>.svg"              (freigestellter Hoji)
+Rendern zu JPG: python tools/render_wallpapers.py <out_dir> system_files/usr/share/wallpapers
 """
 import random
 import sys
@@ -49,7 +56,16 @@ def cloud(x, y, s, flip, t):
             f'<g fill="none" stroke="{t["cloud_line"]}" stroke-width="3.5" stroke-linecap="round" opacity=".9">{curls}</g></g>')
 
 
-def hoji(t):
+def scarf(t):
+    """Winterschal in der Akzentfarbe, sitzt unter dem Kopf."""
+    c = t["accent"]
+    return (f'<path d="M-44 -126 C-46 -112 -44 -96 -38 -78 L-16 -82 C-22 -98 -24 -110 -22 -124 Z" fill="{c}" {ol()}/>'
+            f'<path d="M-40 -84 l-4 10 M-30 -86 l-2 10 M-20 -86 l0 10" stroke="{LINE}" stroke-width="3" stroke-linecap="round"/>'
+            f'<path d="M-62 -152 C-30 -140 30 -140 62 -152 L60 -128 C30 -116 -30 -116 -60 -128 Z" fill="{c}" {ol()}/>'
+            f'<path d="M-40 -142 L-40 -122 M-14 -138 L-14 -118 M14 -138 L14 -118 M40 -142 L40 -122" stroke="{t["accent_in"]}" stroke-width="3" opacity=".6"/>')
+
+
+def hoji(t, extra=""):
     """Chibi red panda standing upright. Origin = between the feet on the ground."""
     ear = (f'<path d="M-150 -22 C-176 -112 -156 -176 -122 -178 C-92 -178 -64 -140 -44 -96 Z" fill="{CREAM}" {ol(6)}/>'
            f'<path d="M-136 -44 C-148 -108 -136 -150 -118 -150 C-100 -148 -84 -124 -72 -98 Z" fill="{LEG}"/>')
@@ -92,7 +108,7 @@ def hoji(t):
                 f'<rect x="{lx-14}" y="{ly+38}" width="28" height="9" rx="3" fill="{LINE}"/>'
                 f'<ellipse cx="46" cy="-112" rx="17" ry="19" fill="{LEG}" {ol()}/>')
         glow_item = f'<circle cx="{lx}" cy="{ly}" r="150" fill="url(#lantern)"/>'
-    return f"""{glow_item}{tail}{body}<g transform="translate(0 -262) scale(.82)">{head}</g>{item}"""
+    return f"""{glow_item}{tail}{body}{extra}<g transform="translate(0 -262) scale(.82)">{head}</g>{item}"""
 
 
 def sign(t):
@@ -126,15 +142,107 @@ def petal(x, y, r, s, color, op):
             'd="M0 0 C6 -12 22 -10 22 2 C22 10 12 15 6 12 L4 8 L1 12 C-2 10 -2 4 0 0 Z"/>')
 
 
-def build(t):
+# ---------- Jahreszeiten ----------
+SEASONS = ("fruehling", "sommer", "herbst", "winter")
+MAPLE = "M0 -14 L4 -6 L11 -9 L8 -1 L14 2 L6 4 L8 12 L0 7 L-8 12 L-6 4 L-14 2 L-8 -1 L-11 -9 L-4 -6 Z"
+
+
+def maple(x, y, r, s, color, op):
+    return (f'<g transform="translate({x:.0f} {y:.0f}) rotate({r:.0f}) scale({s:.2f})" opacity="{op:.2f}">'
+            f'<path d="{MAPLE}" fill="{color}"/><path d="M0 7 L0 18" stroke="{color}" stroke-width="2"/></g>')
+
+
+def flake(x, y, s, color, op):
+    arms = "".join(f'<path d="M0 0 L0 -12 M0 -7 L-4 -10 M0 -7 L4 -10" transform="rotate({a})"/>' for a in range(0, 360, 60))
+    return (f'<g transform="translate({x:.0f} {y:.0f}) scale({s:.2f})" opacity="{op:.2f}" fill="none" '
+            f'stroke="{color}" stroke-width="2.2" stroke-linecap="round">{arms}</g>')
+
+
+def blossom(x, y, s):
+    petals = "".join(f'<ellipse cx="0" cy="-9" rx="6" ry="9" transform="rotate({a})"/>' for a in range(0, 360, 72))
+    return (f'<g transform="translate({x} {y}) scale({s})"><g fill="#F7CCD4" stroke="{LINE}" stroke-width="2.5">{petals}</g>'
+            f'<circle r="4" fill="#E79AAA"/></g>')
+
+
+def sakura_branch():
+    x0, y0 = CX - 540, 215
+    twigs = (f'<path d="M{x0-80} {y0-40} C{x0+60} {y0+10} {x0+170} {y0+40} {x0+330} {y0+110}" />'
+             f'<path d="M{x0+120} {y0+26} C{x0+150} {y0+80} {x0+190} {y0+110} {x0+230} {y0+130}" />'
+             f'<path d="M{x0+250} {y0+74} C{x0+270} {y0+40} {x0+300} {y0+30} {x0+340} {y0+28}" />')
+    wood = (f'<g fill="none" stroke-linecap="round"><g stroke="{LINE}" stroke-width="16">{twigs}</g>'
+            f'<g stroke="#7A5A4A" stroke-width="10">{twigs}</g></g>')
+    spots = [(x0+20, y0-6, 1.1), (x0+110, y0+12, .9), (x0+190, y0+40, 1.2), (x0+235, y0+132, 1.0),
+             (x0+300, y0+92, .9), (x0+338, y0+28, 1.1), (x0+160, y0+86, .8), (x0+340, y0+112, .8)]
+    return wood + "".join(blossom(x, y, sc) for x, y, sc in spots)
+
+
+def sky(season, night):
+    """Hintergrund-Elemente hinter der Szene."""
+    if season == "fruehling":
+        return sakura_branch()
+    if season == "sommer" and not night:
+        return (f'<circle cx="{CX+330}" cy="300" r="170" fill="url(#sun)"/>'
+                f'<circle cx="{CX+330}" cy="300" r="62" fill="#F6D98C" {ol(5)}/>')
+    if season == "herbst" and night:
+        return (f'<circle cx="{CX+300}" cy="300" r="240" fill="url(#moonglow)"/>'
+                f'<circle cx="{CX+300}" cy="300" r="92" fill="#FBF0E2" {ol(5)}/>'
+                f'<circle cx="{CX+270}" cy="280" r="14" fill="#EADCC6"/><circle cx="{CX+330}" cy="330" r="10" fill="#EADCC6"/>')
+    if night:
+        return f'<path d="M{CX+330} 250 a70 70 0 1 0 60 100 a56 56 0 1 1 -60 -100 Z" fill="#FBF0E2" {ol(5)}/>'
+    return ""
+
+
+def particles(t, season, night, rnd):
+    if season == "fruehling":
+        return "".join(petal(CX + rnd.uniform(-420, 420), rnd.uniform(330, 700), rnd.uniform(0, 360),
+                             rnd.uniform(.6, 1.1), t["petal"], rnd.uniform(.5, .9)) for _ in range(11))
+    if season == "sommer":
+        if night:   # Glühwürmchen
+            pts = [(CX + rnd.uniform(-460, 460), rnd.uniform(380, 720)) for _ in range(16)]
+            return "".join(f'<circle cx="{x:.0f}" cy="{y:.0f}" r="26" fill="url(#firefly)"/>'
+                           f'<circle cx="{x:.0f}" cy="{y:.0f}" r="3.5" fill="#F4FBC8"/>' for x, y in pts)
+        return "".join(f'<path transform="translate({CX + rnd.uniform(-430, 430):.0f} {rnd.uniform(360, 700):.0f}) '
+                       f'rotate({rnd.uniform(0, 360):.0f})" d="M0 0 C6 -10 18 -10 22 0 C18 10 6 10 0 0 Z" '
+                       f'fill="#9DBB6B" opacity="{rnd.uniform(.6, .9):.2f}"/>' for _ in range(10))
+    if season == "herbst":
+        cols = ("#D06A35", "#C2566E", "#E09A3E", "#B4452F")
+        return "".join(maple(CX + rnd.uniform(-440, 440), rnd.uniform(320, 710), rnd.uniform(0, 360),
+                             rnd.uniform(.9, 1.5), rnd.choice(cols), rnd.uniform(.7, .95)) for _ in range(14))
+    # winter
+    c = "#FFFFFF" if night else "#B7C6D1"
+    dots = "".join(f'<circle cx="{rnd.uniform(CX-560, CX+560):.0f}" cy="{rnd.uniform(240, 760):.0f}" '
+                   f'r="{rnd.uniform(2, 5):.1f}" fill="{c}" opacity="{rnd.uniform(.5, .9):.2f}"/>' for _ in range(60))
+    return dots + "".join(flake(CX + rnd.uniform(-450, 450), rnd.uniform(300, 700), rnd.uniform(.8, 1.4), c, .85)
+                          for _ in range(9))
+
+
+def ground(season):
+    if season == "winter":
+        return f'<ellipse cx="{CX}" cy="{GROUND+6}" rx="380" ry="24" fill="#FFFFFF" stroke="{LINE}" stroke-opacity=".35" stroke-width="3" opacity=".95"/>'
+    if season == "herbst":
+        cols = ("#D06A35", "#C2566E", "#E09A3E")
+        return "".join(maple(CX + dx, GROUND + 4 + (dx % 7), dx * 3, .9, cols[i % 3], .95)
+                       for i, dx in enumerate((-300, -262, -210, -90, 140, 196, 250, 296)))
+    return ""
+
+
+def snowcaps():
+    return (f'<g transform="translate({CX-250} {GROUND})"><path d="M-56 -362 C-50 -404 50 -404 56 -362 C40 -372 20 -366 4 -374 '
+            f'C-14 -366 -36 -374 -56 -362 Z" fill="#FFFFFF" {ol(4)}/></g>'
+            f'<g transform="translate({CX-120} {GROUND})"><path d="M-30 -80 C-24 -100 24 -100 30 -80 C18 -86 6 -82 0 -88 '
+            f'C-8 -82 -20 -86 -30 -80 Z" fill="#FFFFFF" {ol(3)}/></g>')
+
+
+def build(t, season=None):
+    """season=None: Original-Motiv (Kirschblütenblätter, ohne Zweig)."""
     rnd = random.Random(11)
+    night = t["stars"]
     stars = ""
     if t["stars"]:
         stars = "".join(
             f'<circle cx="{rnd.uniform(40, W-40):.0f}" cy="{rnd.uniform(30, 620):.0f}" r="{rnd.uniform(.8, 2.2):.1f}" fill="#EDE3D3" opacity="{rnd.uniform(.15, .55):.2f}"/>'
             for _ in range(70))
-    petals = "".join(petal(CX + rnd.uniform(-420, 420), rnd.uniform(330, 700), rnd.uniform(0, 360),
-                           rnd.uniform(.6, 1.1), t["petal"], rnd.uniform(.5, .9)) for _ in range(11))
+    petals = particles(t, season or "fruehling", night, rnd)
     clouds = (cloud(CX - 150, 400, 1.15, False, t) + cloud(CX + 250, 470, .9, True, t)
               + cloud(CX - 330, 560, .7, False, t))
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}">
@@ -145,6 +253,9 @@ def build(t):
   <radialGradient id="glow" cx="{CX}" cy="560" r="420" gradientUnits="userSpaceOnUse">
     <stop offset="0" stop-color="{t['glow']}" stop-opacity="{t['glow_op']}"/><stop offset="1" stop-color="{t['glow']}" stop-opacity="0"/>
   </radialGradient>
+  <radialGradient id="sun"><stop offset="0" stop-color="#F6D98C" stop-opacity=".55"/><stop offset="1" stop-color="#F6D98C" stop-opacity="0"/></radialGradient>
+  <radialGradient id="moonglow"><stop offset="0" stop-color="#FBF0E2" stop-opacity=".35"/><stop offset="1" stop-color="#FBF0E2" stop-opacity="0"/></radialGradient>
+  <radialGradient id="firefly"><stop offset="0" stop-color="#E8F5A3" stop-opacity=".8"/><stop offset="1" stop-color="#E8F5A3" stop-opacity="0"/></radialGradient>
   <radialGradient id="lantern"><stop offset="0" stop-color="#FFD6DE" stop-opacity=".55"/><stop offset="1" stop-color="#FFD6DE" stop-opacity="0"/></radialGradient>
   <filter id="paper" x="0" y="0" width="100%" height="100%">
     <feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" seed="4"/>
@@ -154,12 +265,16 @@ def build(t):
 <rect width="{W}" height="{H}" fill="url(#bg)"/>
 {stars}
 <rect width="{W}" height="{H}" fill="url(#glow)"/>
+{sky(season, night) if season else ""}
 {clouds}
-{petals}
+{petals if not season or season in ("fruehling", "herbst") or (season == "sommer" and not night) else ""}
 <ellipse cx="{CX}" cy="{GROUND+4}" rx="330" ry="18" fill="{LINE}" opacity=".18"/>
+{ground(season)}
 <g transform="translate({CX-250} {GROUND})">{sign(t)}</g>
 <g transform="translate({CX-120} {GROUND})">{teapot(t)}</g>
-<g transform="translate({CX+30} {GROUND})">{hoji(t)}</g>
+{snowcaps() if season == "winter" else ""}
+<g transform="translate({CX+30} {GROUND})">{hoji(t, scarf(t) if season == "winter" else "")}</g>
+{petals if season == "winter" or (season == "sommer" and night) else ""}
 <text x="{CX}" y="{GROUND+70}" text-anchor="middle" font-family="Zen Maru Gothic, Nunito, Segoe UI, sans-serif" font-size="22" font-weight="700" letter-spacing="6" fill="{t['ink']}" opacity=".8">喫茶 kissa</text>
 <rect width="{W}" height="{H}" filter="url(#paper)"/>
 </svg>
@@ -169,6 +284,8 @@ def build(t):
 OUT.mkdir(parents=True, exist_ok=True)
 for name, t in THEMES.items():
     (OUT / f"kissa wallpaper {name}.svg").write_text(build(t), encoding="utf-8")
+    for season in SEASONS:
+        (OUT / f"kissa {season} {name}.svg").write_text(build(t, season), encoding="utf-8")
     print("wrote", name)
 
 # standalone Hoji (transparent) – source for the terminal pixel art

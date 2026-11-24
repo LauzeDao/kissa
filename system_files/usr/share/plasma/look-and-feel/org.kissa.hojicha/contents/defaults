@@ -5,7 +5,10 @@ ColorScheme=KissaHojicha
 widgetStyle=Breeze
 
 [kdeglobals][Icons]
-Theme=breeze
+Theme=kissa-hojicha
+
+[kdeglobals][Sounds]
+Theme=kissa
 
 [plasmarc][Theme]
 name=default
@@ -26,4 +29,4 @@ Engine=KSplashQML
 Theme=org.kissa.hojicha
 
 [Wallpaper]
-Image=Kissa
+Image=Kissa-fruehling

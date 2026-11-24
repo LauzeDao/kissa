@@ -80,7 +80,10 @@ ColorScheme={scheme}
 widgetStyle=Breeze
 
 [kdeglobals][Icons]
-Theme=breeze
+Theme=kissa-{variant}
+
+[kdeglobals][Sounds]
+Theme=kissa
 
 [plasmarc][Theme]
 name=default
@@ -101,7 +104,7 @@ Engine=KSplashQML
 Theme=org.kissa.{variant}
 
 [Wallpaper]
-Image=Kissa
+Image=Kissa-fruehling
 """
 
 SPLASH_QML = """import QtQuick

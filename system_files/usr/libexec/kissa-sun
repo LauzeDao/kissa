@@ -1,0 +1,33 @@
+#!/usr/bin/python3
+"""kissa-sun <breite> <länge> – ist gerade Tag oder Nacht?
+
+Ausgabe: "tag|nacht <sonnenaufgang> <sonnenuntergang>" (Ortszeit, HH:MM)
+Rechnung nach der NOAA-Näherung, genau auf wenige Minuten – reicht für den Theme-Wechsel.
+"""
+import math
+import sys
+from datetime import datetime, timedelta, timezone
+
+lat, lon = float(sys.argv[1]), float(sys.argv[2])
+now = datetime.now(timezone.utc)
+day = now.timetuple().tm_yday
+g = 2 * math.pi / 365 * (day - 1 + (now.hour - 12) / 24)
+eqtime = 229.18 * (0.000075 + 0.001868 * math.cos(g) - 0.032077 * math.sin(g)
+                   - 0.014615 * math.cos(2 * g) - 0.040849 * math.sin(2 * g))
+decl = (0.006918 - 0.399912 * math.cos(g) + 0.070257 * math.sin(g) - 0.006758 * math.cos(2 * g)
+        + 0.000907 * math.sin(2 * g) - 0.002697 * math.cos(3 * g) + 0.00148 * math.sin(3 * g))
+la = math.radians(lat)
+x = math.cos(math.radians(90.833)) / (math.cos(la) * math.cos(decl)) - math.tan(la) * math.tan(decl)
+midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+if x <= -1:      # Mitternachtssonne
+    print("tag --:-- --:--")
+    sys.exit()
+if x >= 1:       # Polarnacht
+    print("nacht --:-- --:--")
+    sys.exit()
+ha = math.degrees(math.acos(x))
+rise = midnight + timedelta(minutes=720 - 4 * (lon + ha) - eqtime)
+sset = midnight + timedelta(minutes=720 - 4 * (lon - ha) - eqtime)
+state = "tag" if rise <= now < sset else "nacht"
+fmt = lambda t: t.astimezone().strftime("%H:%M")
+print(state, fmt(rise), fmt(sset))

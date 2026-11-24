@@ -1,0 +1,8 @@
+[Sound Theme]
+Name=kissa
+Comment=Leise Kalimba- und Papiertöne für kissa
+Inherits=ocean,freedesktop
+Directories=stereo
+
+[stereo]
+OutputProfile=stereo

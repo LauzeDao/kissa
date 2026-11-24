@@ -1,0 +1,10 @@
+[Unit]
+Description=kissa: alle 10 Minuten Tag/Nacht und Jahreszeit prüfen
+
+[Timer]
+OnStartupSec=1min
+OnUnitActiveSec=10min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

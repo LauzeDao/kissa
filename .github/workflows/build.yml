@@ -30,6 +30,8 @@ jobs:
     permissions:
       contents: read
       packages: write # Push nach ghcr.io
+      security-events: write # Scan-Ergebnisse in "Code scanning"
+      actions: read # Paketliste des letzten Builds laden (Änderungsprotokoll)
     steps:
       - name: Speicherplatz freimachen (das Image ist groß)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
@@ -59,6 +61,9 @@ jobs:
             -t "${IMAGE}:latest" \
             -t "${IMAGE}:${DATE_TAG}" \
             .
+
+      - name: Image testen (ist alles drin?)
+        run: podman run --rm --network=none -v "$PWD/tests:/tests:ro" "${IMAGE}:latest" bash /tests/image-test.sh
 
       - name: Bei GHCR anmelden
         if: github.event_name != 'pull_request'
@@ -102,3 +107,102 @@ jobs:
             echo ""
             echo "Umsteigen: \`sudo bootc switch ${IMAGE}:latest\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------- Stückliste (SBOM), Schwachstellen, Änderungsprotokoll ----------
+      # Diese Schritte berichten nur; ein Fund oder ein Ausfall stoppt das Update nicht.
+      - name: syft installieren
+        id: syft
+        uses: anchore/sbom-action/download-syft@dfcb83b97731532d72be422cbc51ee64adb6fd56 # v0.24.4
+        with:
+          syft-version: v1.57.2
+
+      - name: trivy installieren
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.76.2
+          cache: true
+
+      - name: SBOM erstellen und nach Schwachstellen scannen
+        id: scan
+        continue-on-error: true
+        env:
+          SYFT: ${{ steps.syft.outputs.cmd }}
+        run: |
+          export TRIVY="$(command -v trivy)"
+          # Dateisystem des Images direkt einhängen (rootless: im User-Namespace von podman)
+          podman unshare bash -euo pipefail -c '
+            mnt=$(podman image mount "${IMAGE}:latest")
+            trap "podman image umount \"${IMAGE}:latest\" >/dev/null" EXIT
+            "$SYFT" scan "dir:$mnt" --quiet --output spdx-json=sbom.spdx.json
+            "$TRIVY" rootfs "$mnt" --quiet --scanners vuln \
+              --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 \
+              --format json --output trivy.json
+          '
+          trivy convert --format sarif --output trivy.sarif trivy.json
+          {
+            echo "### 🔎 Schwachstellen (HIGH/CRITICAL, nur mit verfügbarem Fix)"
+            echo ""
+            jq -r '[.Results[]?.Vulnerabilities[]?] | unique_by(.VulnerabilityID + .PkgName)
+                   | "- CRITICAL: \(map(select(.Severity=="CRITICAL"))|length)\n- HIGH: \(map(select(.Severity=="HIGH"))|length)"' trivy.json
+            echo ""
+            echo "Details: Security → Code scanning (bei Pushes auf main) und Artefakt **sbom**."
+            echo "SBOM: $(jq '.packages | length' sbom.spdx.json) Pakete erfasst (SPDX-JSON)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: SBOM signiert an das Image hängen
+        if: github.event_name != 'pull_request' && steps.scan.outcome == 'success'
+        continue-on-error: true
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.SIGNING_SECRET }}
+          COSIGN_PASSWORD: ""
+        run: cosign attest --yes --key env://COSIGN_PRIVATE_KEY --type spdxjson --predicate sbom.spdx.json "${IMAGE}@${DIGEST}"
+
+      - name: Scan-Ergebnisse nach GitHub (Code scanning)
+        if: github.event_name != 'pull_request' && steps.scan.outcome == 'success'
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@1bd86f2fdb4b86187fa4059f16f31a3202acc9ea # v4.39.4
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-kissa-image
+
+      - name: SBOM und Scan als Artefakt
+        if: steps.scan.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: |
+            sbom.spdx.json
+            trivy.json
+          retention-days: 90
+
+      - name: Änderungsprotokoll (Pakete gegenüber dem letzten Build)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          podman run --rm --network=none "${IMAGE}:latest" \
+            rpm -qa --queryformat '%{NAME}.%{ARCH} %{VERSION}-%{RELEASE}\n' | sort > packages.txt
+          echo "### 📦 Pakete ($(wc -l < packages.txt) installiert)" >> "$GITHUB_STEP_SUMMARY"
+          prev=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow build.yml --branch main \
+                   --status success --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [[ -z $prev ]] || ! gh run download "$prev" --repo "$GITHUB_REPOSITORY" --name packages --dir prev 2>/dev/null; then
+            echo "Kein Vorgänger-Build mit Paketliste gefunden – ab dem nächsten Build gibt es hier den Vergleich." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          awk 'NR==FNR {old[$1]=$2; next}
+               { if (!($1 in old)) add[$1]=$2; else if (old[$1]!=$2) upd[$1]=old[$1] " → " $2; delete old[$1] }
+               END {
+                 n=0; for (p in upd) n++; printf "\n**Aktualisiert (%d)**\n\n", n; for (p in upd) printf "- `%s` %s\n", p, upd[p]
+                 n=0; for (p in add) n++; printf "\n**Neu (%d)**\n\n", n; for (p in add) printf "- `%s` %s\n", p, add[p]
+                 n=0; for (p in old) n++; printf "\n**Entfernt (%d)**\n\n", n; for (p in old) printf "- `%s` %s\n", p, old[p]
+               }' prev/packages.txt packages.txt > changes.md
+          echo "Vergleich mit Lauf [$prev](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/$prev):" >> "$GITHUB_STEP_SUMMARY"
+          cat changes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Paketliste als Artefakt (Basis für den nächsten Vergleich)
+        if: hashFiles('packages.txt') != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: packages.txt
+          retention-days: 90

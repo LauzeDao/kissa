@@ -4,35 +4,44 @@
 #   kissa status          Welches Image läuft gerade?
 #   kissa update          Neues Image holen (wird beim nächsten Neustart aktiv)
 #   kissa rollback        Zurück zum vorherigen Image
-#   kissa theme [matcha|hojicha]   Hell/Dunkel umschalten
+#   kissa modus [hell|dunkel|zeit]   Hell, dunkel oder automatisch nach Sonnenstand
+#   kissa modus ort <breite> <länge> Standort für "zeit" (Standard: Hamburg)
+#   kissa theme [matcha|hojicha]     Theme direkt setzen (stellt den Modus auf hell/dunkel)
+#   kissa fenster [layout]  Fenster-Raster (halb, fokus, mitte, drei, raster, stapel)
+#   kissa tipps [wort]    Windows → Linux-Spickzettel (mit Suchwort filtern)
 #   kissa info            Systemübersicht (fastfetch)
 #   kissa tee [text]      Der Panda sagt etwas
-#   kissa lab up|down     Lokalen Kubernetes-Cluster (kind) starten/stoppen
+#   kissa box [ubuntu|rocky|fedora]  Anderes Linux im Terminal (distrobox)
+#   kissa lab up [gitops]|down       Lokaler Kubernetes-Cluster (kind, optional mit Flux)
 #   kissa setup           Terminal, Prompt und Theme für deinen Benutzer einrichten
 #   kissa layout          Seitenleiste + Notch wiederherstellen
 #   kissa glas an|aus     Leichte Transparenz für Fenster und Menüs
 set -euo pipefail
 
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
 KISSA_SHARE="${KISSA_SHARE:-/usr/share/kissa}"
-WALLPAPERS="${KISSA_WALLPAPERS:-/usr/share/backgrounds/kissa}"
+WALLPAPERS="${KISSA_WALLPAPERS:-/usr/share/wallpapers}"
 THEME="$(cat "$CONF/kissa/theme" 2>/dev/null || echo matcha)"
 RUST="#D06A35"; MUTED="#9893A5"
 case $THEME in hojicha) ACCENT="#F0B6C1"; UME="#E07A6A";; *) ACCENT="#7A9A4F"; UME="#B4637A";; esac
 has() { command -v "$1" >/dev/null 2>&1; }
+QUIET=""
 
 # ---------- Darstellung (mit gum hübsch, ohne gum schlicht) ----------
 title() {
+  [[ -n $QUIET ]] && return 0
   if has gum; then
     gum style --border rounded --border-foreground "$RUST" --foreground "$RUST" \
       --bold --padding "0 2" --margin "1 0 0 0" "喫茶 kissa · $*"
   else printf '\n== kissa · %s ==\n' "$*"; fi
 }
-ok()   { if has gum; then gum style --foreground "$ACCENT" "✓ $*"; else echo "✓ $*"; fi; }
-warn() { if has gum; then gum style --foreground "$UME"    "✗ $*"; else echo "✗ $*" >&2; fi; }
-note() { if has gum; then gum style --foreground "$MUTED" "$*"; else echo "$*"; fi; }
+ok()   { [[ -n $QUIET ]] && return 0; if has gum; then gum style --foreground "$ACCENT" "✓ $*"; else echo "✓ $*"; fi; }
+warn() { if has gum && [[ -t 1 ]]; then gum style --foreground "$UME" "✗ $*"; else echo "✗ $*" >&2; fi; }
+note() { [[ -n $QUIET ]] && return 0; if has gum; then gum style --foreground "$MUTED" "$*"; else echo "$*"; fi; }
 confirm() { if has gum; then gum confirm --selected.background "$ACCENT" "$1"; else read -rp "$1 [j/N] " a; [[ $a == [jJyY] ]]; fi; }
 spin() { local t=$1; shift; if has gum; then gum spin --spinner moon --title "$t" --show-output -- "$@"; else echo "$t"; "$@"; fi; }
+usage() { awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"; }
 
 # ---------- Befehle ----------
 cmd_status() {
@@ -55,40 +64,235 @@ cmd_rollback() {
   else note "Abgebrochen."; fi
 }
 
+# ---------- Jahreszeit, Tag/Nacht, Modus ----------
+season() {
+  case $(date +%-m) in 3|4|5) echo fruehling;; 6|7|8) echo sommer;; 9|10|11) echo herbst;; *) echo winter;; esac
+}
+
+# Standort für den Sonnenstand: ~/.config/kissa/ort = "breite länge" (Standard: Hamburg)
+location() { cat "$CONF/kissa/ort" 2>/dev/null || echo "53.55 9.99"; }
+
+# "tag" oder "nacht" (plus Sonnenauf-/untergang), Rückfall ohne Python: 7–19 Uhr = Tag
+sun() {
+  local loc; read -ra loc <<<"$(location)"
+  /usr/libexec/kissa-sun "${loc[0]}" "${loc[1]}" 2>/dev/null && return
+  local h; h=$(date +%-H); if (( h >= 7 && h < 19 )); then echo "tag 07:00 19:00"; else echo "nacht 07:00 19:00"; fi
+}
+
+mode() { cat "$CONF/kissa/modus" 2>/dev/null || echo zeit; }
+
+# Welches Theme passt gerade zum Modus?
+wanted_theme() {
+  case $(mode) in
+    hell) echo matcha;; dunkel) echo hojicha;;
+    *) if [[ $(sun | cut -d' ' -f1) == tag ]]; then echo matcha; else echo hojicha; fi;;
+  esac
+}
+
+wallpaper_for() {   # <theme> [jahreszeit]
+  local s=${2:-$(season)} sub=images
+  [[ $1 == hojicha ]] && sub=images_dark
+  local img="$WALLPAPERS/Kissa-$s/contents/$sub/3840x2160.jpg"
+  [[ -f $img ]] || img="$WALLPAPERS/Kissa/contents/$sub/3840x2160.png"
+  echo "$img"
+}
+
+set_wallpaper() {
+  local img; img=$(wallpaper_for "$@")
+  [[ -f $img ]] && has plasma-apply-wallpaperimage || return 0
+  if plasma-apply-wallpaperimage "$img" >/dev/null 2>&1; then ok "Hintergrundbild ($(season))"
+  else warn "Hintergrundbild nicht gesetzt (läuft Plasma?)"; fi
+}
+
+cmd_modus() {
+  local m="${1:-}"
+  if [[ $m == ort ]]; then
+    [[ ${2:-} =~ ^-?[0-9.]+$ && ${3:-} =~ ^-?[0-9.]+$ ]] || { warn "kissa modus ort <breite> <länge>  (z. B. 51.34 12.37 für Leipzig)"; return 1; }
+    mkdir -p "$CONF/kissa" && echo "$2 $3" > "$CONF/kissa/ort"
+    ok "Standort gespeichert: $2, $3"; m=zeit
+  fi
+  if [[ -z $m ]]; then
+    if has gum; then
+      m=$(gum choose --header "Wie soll kissa aussehen? (gerade: $(mode))" --cursor.foreground "$RUST" \
+          "☀️  hell" "🌙 dunkel" "🕰️  zeit (nach Sonnenstand)") || return 0
+      case $m in *hell) m=hell;; *dunkel) m=dunkel;; *) m=zeit;; esac
+    else read -rp "hell, dunkel oder zeit? " m; fi
+  fi
+  case $m in hell|dunkel|zeit) ;; *) warn "kissa modus hell | dunkel | zeit"; return 1;; esac
+  mkdir -p "$CONF/kissa" && echo "$m" > "$CONF/kissa/modus"
+  title "Modus → $m"
+  if [[ $m == zeit ]]; then
+    local s; read -ra s <<<"$(sun)"
+    note "Sonnenaufgang ${s[1]}, Sonnenuntergang ${s[2]} – gerade ist ${s[0]}."
+    note "Standort ändern: kissa modus ort <breite> <länge>"
+  fi
+  apply_auto force
+}
+
+# Vom Timer aufgerufen (alle 10 Minuten): Theme und Jahreszeiten-Bild nur bei Änderung setzen
+apply_auto() {
+  local force=${1:-} t s state
+  t=$(wanted_theme); s=$(season); state="$t $s"
+  if [[ -z $force && "$(cat "$CACHE/kissa/auto-state" 2>/dev/null)" == "$state" ]]; then return 0; fi
+  if [[ $t != "$THEME" || -n $force ]]; then apply_theme "$t"; else set_wallpaper "$t" "$s"; fi
+  mkdir -p "$CACHE/kissa" && echo "$state" > "$CACHE/kissa/auto-state"
+}
+
+cmd_auto() {
+  [[ -f $CONF/kissa/setup-done ]] || return 0                 # noch nicht eingerichtet
+  pgrep -u "$USER" -x plasmashell >/dev/null || return 0      # kein Desktop
+  QUIET=1 apply_auto "${1:-}"
+}
+
 cmd_theme() {
   local t="${1:-}"
   if [[ -z $t ]]; then
-    if has gum; then t=$(gum choose --header "Welche Teesorte?" --cursor.foreground "$RUST" matcha hojicha)
+    if has gum; then t=$(gum choose --header "Welche Teesorte?" --cursor.foreground "$RUST" matcha hojicha) || return 0
     else read -rp "matcha oder hojicha? " t; fi
   fi
   case $t in matcha|hojicha) ;; *) warn "Unbekanntes Theme: $t (matcha oder hojicha)"; return 1;; esac
+  # Wer das Theme von Hand setzt, will es behalten: Modus passend auf hell/dunkel stellen
+  mkdir -p "$CONF/kissa"
+  if [[ $t == matcha ]]; then echo hell > "$CONF/kissa/modus"; else echo dunkel > "$CONF/kissa/modus"; fi
+  apply_theme "$t" "${2:-}"
+  note "Automatisch nach Tageszeit wechseln: kissa modus zeit"
+}
+
+apply_theme() {
+  local t=$1
   title "Theme → $t"
-  # Global Theme: Farben, Mauszeiger, Fensterrahmen, Ladebildschirm (Layout nur mit --layout)
+  # Global Theme: Farben, Icons, Klänge, Mauszeiger, Ladebildschirm (Layout nur mit --layout)
   local laf_args=(-a "org.kissa.$t")
   [[ ${2:-} == --layout ]] && laf_args+=(--resetLayout)
   if has plasma-apply-lookandfeel && plasma-apply-lookandfeel "${laf_args[@]}" >/dev/null 2>&1; then
-    ok "Desktop-Theme (Farben, Mauszeiger, Ladebildschirm)"
+    ok "Desktop-Theme (Farben, Icons, Mauszeiger, Ladebildschirm)"
     [[ ${2:-} == --layout ]] && ok "Seitenleiste + Notch"
   elif has plasma-apply-colorscheme && plasma-apply-colorscheme "Kissa${t^}" >/dev/null 2>&1; then
     ok "Desktop-Farben"; warn "Global Theme org.kissa.$t nicht angewendet, nur die Farben"
   else
     warn "Desktop-Theme nicht gesetzt (läuft Plasma?)"
   fi
-  local img="$WALLPAPERS/contents/images/3840x2160.png"
-  [[ $t == hojicha ]] && img="$WALLPAPERS/contents/images_dark/3840x2160.png"
-  if [[ -f $img ]] && has plasma-apply-wallpaperimage; then
-    if plasma-apply-wallpaperimage "$img" >/dev/null 2>&1; then ok "Hintergrundbild"; else warn "Hintergrundbild nicht gesetzt (läuft Plasma?)"; fi
-  fi
+  set_wallpaper "$t"
   mkdir -p "$CONF/kissa" && echo "$t" > "$CONF/kissa/theme"
   ln -sf "$KISSA_SHARE/hoji-$t.ansi" "$CONF/kissa/hoji.ansi" && ok "Hoji im Terminal"
-  local key; [[ $t == hojicha ]] && key="38;2;240;182;193" || key="38;2;122;154;79"
-  [[ -f $CONF/fastfetch/config.jsonc ]] && sed -i "s/\"keys\": \"[^\"]*\"/\"keys\": \"$key\"/" "$CONF/fastfetch/config.jsonc" && ok "fastfetch"
-  [[ -f $CONF/starship.toml ]] && sed -i "s/^palette = .*/palette = \"$t\"/" "$CONF/starship.toml" && ok "Prompt"
+  local key; if [[ $t == hojicha ]]; then key="38;2;240;182;193"; else key="38;2;122;154;79"; fi
+  if [[ -f $CONF/fastfetch/config.jsonc ]]; then sed -i "s/\"keys\": \"[^\"]*\"/\"keys\": \"$key\"/" "$CONF/fastfetch/config.jsonc" && ok "fastfetch"; fi
+  if [[ -f $CONF/starship.toml ]]; then sed -i "s/^palette = .*/palette = \"$t\"/" "$CONF/starship.toml" && ok "Prompt"; fi
   if has kwriteconfig6; then
     kwriteconfig6 --file konsolerc --group "Desktop Entry" --key DefaultProfile "kissa-$t.profile" && ok "Terminal-Profil"
   fi
   if [[ -n ${KONSOLE_VERSION:-} ]] && has konsoleprofile; then konsoleprofile "ColorScheme=kissa-$t"; fi
   note "Neue Terminals übernehmen das Theme automatisch."
+}
+
+# ---------- Fenster-Raster (KWin-Kacheln) ----------
+# Gespeichert in kwinrc unter [Tiling][<Arbeitsfläche>][<Bildschirm>]; KWin liest das beim Anmelden.
+declare -A TILES=(
+  [halb]='{"layoutDirection":"horizontal","tiles":[{"width":0.5},{"width":0.5}]}'
+  [fokus]='{"layoutDirection":"horizontal","tiles":[{"width":0.66},{"width":0.34}]}'
+  [mitte]='{"layoutDirection":"horizontal","tiles":[{"width":0.2},{"width":0.6},{"width":0.2}]}'
+  [drei]='{"layoutDirection":"horizontal","tiles":[{"width":0.333},{"width":0.334},{"width":0.333}]}'
+  [raster]='{"layoutDirection":"horizontal","tiles":[{"width":0.5,"layoutDirection":"vertical","tiles":[{"height":0.5},{"height":0.5}]},{"width":0.5,"layoutDirection":"vertical","tiles":[{"height":0.5},{"height":0.5}]}]}'
+  [stapel]='{"layoutDirection":"horizontal","tiles":[{"width":0.6},{"width":0.4,"layoutDirection":"vertical","tiles":[{"height":0.5},{"height":0.5}]}]}'
+)
+declare -A TILES_PIC=(
+  [halb]=$'┌─────┬─────┐\n│     │     │\n│     │     │\n└─────┴─────┘'
+  [fokus]=$'┌───────┬───┐\n│       │   │\n│       │   │\n└───────┴───┘'
+  [mitte]=$'┌──┬──────┬──┐\n│  │      │  │\n│  │      │  │\n└──┴──────┴──┘'
+  [drei]=$'┌───┬───┬───┐\n│   │   │   │\n│   │   │   │\n└───┴───┴───┘'
+  [raster]=$'┌─────┬─────┐\n│     │     │\n├─────┼─────┤\n│     │     │\n└─────┴─────┘'
+  [stapel]=$'┌───────┬───┐\n│       │   │\n│       ├───┤\n│       │   │\n└───────┴───┘'
+)
+
+cmd_fenster() {
+  local l="${1:-}" name
+  if [[ -z $l ]]; then
+    if has gum; then
+      l=$(gum choose --header "Welches Fenster-Raster?" --cursor.foreground "$RUST" halb fokus mitte drei raster stapel) || return 0
+    else read -rp "halb, fokus, mitte, drei, raster oder stapel? " l; fi
+  fi
+  [[ -n ${TILES[$l]:-} ]] || { warn "Unbekanntes Raster: $l (halb, fokus, mitte, drei, raster, stapel)"; return 1; }
+  has kwriteconfig6 || { warn "kwriteconfig6 fehlt"; return 1; }
+  title "Fenster-Raster → $l"
+  if [[ -z $QUIET ]]; then if has gum; then gum style --foreground "$ACCENT" "${TILES_PIC[$l]}"; else echo "${TILES_PIC[$l]}"; fi; fi
+
+  # Arbeitsflächen-IDs aus kwinrc, Bildschirm-IDs aus kwinoutputconfig.json
+  local desks=() outs=() pairs=() n i d o p
+  n=$(kreadconfig6 --file kwinrc --group Desktops --key Number 2>/dev/null || true)
+  for ((i = 1; i <= ${n:-1}; i++)); do
+    d=$(kreadconfig6 --file kwinrc --group Desktops --key "Id_$i" 2>/dev/null || true)
+    [[ -n $d ]] && desks+=("$d")
+  done
+  if [[ -f $CONF/kwinoutputconfig.json ]] && has jq; then
+    mapfile -t outs < <(jq -r '.[] | select(.name == "outputs") | .data[].uuid // empty' "$CONF/kwinoutputconfig.json" 2>/dev/null | sort -u)
+  fi
+  for d in "${desks[@]}"; do for o in "${outs[@]}"; do pairs+=("$d|$o"); done; done
+  # Bereits vorhandene Einträge (falls KWin schon etwas gespeichert hat) ebenfalls überschreiben
+  while IFS= read -r name; do [[ -n $name ]] && pairs+=("$name"); done < <(grep -o '^\[Tiling\]\[[^]]*\]\[[^]]*\]' "$CONF/kwinrc" 2>/dev/null \
+      | sed 's/^\[Tiling\]\[\([^]]*\)\]\[\([^]]*\)\]$/\1|\2/' || true)
+  if (( ${#pairs[@]} == 0 )); then
+    warn "Keine Arbeitsfläche/Bildschirm gefunden. Einmal Meta+T drücken und schließen, dann nochmal versuchen."
+    return 1
+  fi
+  while IFS= read -r p; do
+    kwriteconfig6 --file kwinrc --group Tiling --group "${p%%|*}" --group "${p##*|}" --key tiles "${TILES[$l]}"
+    kwriteconfig6 --file kwinrc --group Tiling --group "${p%%|*}" --group "${p##*|}" --key padding 8
+  done < <(printf '%s\n' "${pairs[@]}" | sort -u)
+  mkdir -p "$CONF/kissa" && echo "$l" > "$CONF/kissa/fenster"
+  ok "Raster gespeichert – aktiv ab dem nächsten Anmelden"
+  note "Benutzen: Fenster mit gedrückter Umschalt-Taste ziehen → rastet in eine Kachel ein."
+  note "Anpassen: Meta+T öffnet den Kachel-Editor."
+}
+
+# ---------- Spickzettel ----------
+cmd_tipps() {
+  local q="${1:-}" file="$KISSA_SHARE/tipps.tsv" rows
+  title "Windows → kissa"
+  rows=$(grep -v '^#' "$file" | { if [[ -n $q ]]; then grep -i -- "$q" || true; else cat; fi; })
+  [[ -n $rows ]] || { warn "Nichts zu „$q“ gefunden"; return 1; }
+  if has gum; then
+    { printf 'Windows\tkissa\tHinweis\n'; echo "$rows"; } | gum table --separator $'\t' --print \
+        --border rounded --border.foreground "$MUTED" --header.foreground "$ACCENT" 2>/dev/null \
+      || echo "$rows" | column -t -s $'\t'
+  else
+    echo "$rows" | column -t -s $'\t'
+  fi
+  [[ -n $q ]] || note "Suchen: kissa tipps <wort>   (z. B. kissa tipps netz)"
+}
+
+# Ein Tipp pro Tag für die Begrüßung im Terminal
+cmd_tipp() {
+  local file="$KISSA_SHARE/tipps.tsv" n line win lin hint
+  [[ -f $file ]] || return 0
+  n=$(grep -vc '^#' "$file")
+  line=$(grep -v '^#' "$file" | sed -n "$(( 10#$(date +%j) % n + 1 ))p")
+  IFS=$'\t' read -r win lin hint <<<"$line"
+  if has gum; then
+    gum style --foreground "$MUTED" "💡 $win → $lin  ·  $hint"
+  else echo "💡 $win → $lin  ·  $hint"; fi
+}
+
+# ---------- Andere Linuxe im Terminal ----------
+cmd_box() {
+  local d="${1:-}" img
+  has distrobox || { warn "distrobox ist nicht installiert."; return 1; }
+  if [[ -z $d ]]; then
+    if has gum; then d=$(gum choose --header "Welches Linux?" --cursor.foreground "$RUST" ubuntu rocky fedora) || return 0
+    else read -rp "ubuntu, rocky oder fedora? " d; fi
+  fi
+  case $d in
+    ubuntu) img=quay.io/toolbx/ubuntu-toolbox:24.04;;
+    rocky)  img=quay.io/rockylinux/rockylinux:9;;
+    fedora) img=registry.fedoraproject.org/fedora-toolbox:latest;;
+    *) warn "kissa box ubuntu | rocky | fedora"; return 1;;
+  esac
+  if ! distrobox list 2>/dev/null | grep -q " $d "; then
+    title "Box $d anlegen"
+    note "Einmalig: Image laden und einrichten (dauert ein paar Minuten)."
+    distrobox create --yes --name "$d" --image "$img"
+  fi
+  note "Du bist gleich in $d. Dein Home-Ordner ist derselbe. Raus mit: exit"
+  distrobox enter "$d"
 }
 
 cmd_lab() {
@@ -98,10 +302,16 @@ cmd_lab() {
   case $action in
     up)   title "K8s-Lab starten"
           spin "Cluster wird gebaut (dauert ca. 1 Minute) …" kind create cluster --name "$name"
-          ok "Cluster läuft. Probier: kubectl get nodes  oder  k9s";;
+          ok "Cluster läuft. Probier: kubectl get nodes  oder  k9s"
+          if [[ ${2:-} == gitops ]]; then
+            has flux || { warn "flux ist nicht installiert."; return 1; }
+            spin "Flux (GitOps) wird installiert …" flux install
+            ok "Flux läuft: kubectl get pods -n flux-system"
+            note "Nächster Schritt: flux bootstrap github --owner=<du> --repository=<repo> --personal"
+          fi;;
     down) title "K8s-Lab stoppen"
           confirm "Cluster $name löschen?" && kind delete cluster --name "$name" && ok "Weg ist er.";;
-    *)    warn "kissa lab up | down";;
+    *)    warn "kissa lab up [gitops] | down";;
   esac
 }
 
@@ -109,8 +319,8 @@ cmd_setup() {
   # --once: nur beim allerersten Login (Autostart), danach nie wieder automatisch
   if [[ ${1:-} == --once ]]; then
     [[ -f $CONF/kissa/setup-done ]] && return 0
-    mkdir -p "$CONF/kissa" "${XDG_CACHE_HOME:-$HOME/.cache}"
-    exec >>"${XDG_CACHE_HOME:-$HOME/.cache}/kissa-setup.log" 2>&1
+    mkdir -p "$CONF/kissa" "$CACHE"
+    exec >>"$CACHE/kissa-setup.log" 2>&1
     echo "--- $(date) kissa setup --once"
     # Warten, bis der Plasma-Desktop läuft – sonst greifen Wallpaper und Farben ins Leere
     for _ in $(seq 1 60); do pgrep -u "$USER" -x plasmashell >/dev/null && break; sleep 1; done
@@ -128,11 +338,14 @@ cmd_setup() {
   if has kwriteconfig6; then
     kwriteconfig6 --file kdeglobals --group General --key TerminalApplication konsole
     kwriteconfig6 --file kdeglobals --group General --key TerminalService org.kde.konsole.desktop
-    ok "Konsole als Standard-Terminal"
+    kwriteconfig6 --file kdeglobals --group Sounds --key Theme kissa
+    ok "Konsole als Standard-Terminal, kissa-Klänge"
   fi
   cmd_glass an
-  local t; t="$(cat "$CONF/kissa/theme" 2>/dev/null || echo matcha)"
-  cmd_theme "$t" --layout
+  [[ -f $CONF/kissa/modus ]] || echo zeit > "$CONF/kissa/modus"
+  apply_theme "$(wanted_theme)" --layout
+  [[ -f $CONF/kissa/fenster ]] || QUIET=1 cmd_fenster stapel || true
+  mkdir -p "$CACHE/kissa" && echo "$(wanted_theme) $(season)" > "$CACHE/kissa/auto-state"
   touch "$CONF/kissa/setup-done"
 }
 
@@ -172,15 +385,17 @@ cmd_glass() {
 }
 
 cmd_menu() {
-  has gum || { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; return; }
+  has gum || { usage; return; }
   pandasay "Was möchtest du tun?" 2>/dev/null || title "Menü"
   local c
   c=$(gum choose --cursor.foreground "$RUST" --selected.foreground "$ACCENT" \
-      "🍵 Status" "⬆️  Update" "↩️  Rollback" "🎨 Theme" "🪟 Transparenz an/aus" "🐾 Systeminfo" "⎈  K8s-Lab starten" "🧹 K8s-Lab stoppen" "Beenden") || return 0
+      "🍵 Status" "⬆️  Update" "↩️  Rollback" "🌗 Hell / Dunkel / Zeit" "🪟 Fenster-Raster" "✨ Transparenz an/aus" \
+      "💡 Windows-Spickzettel" "🐾 Systeminfo" "📦 Anderes Linux (Box)" "⎈  K8s-Lab starten" "🧹 K8s-Lab stoppen" "Beenden") || return 0
   case $c in
     *Status*) cmd_status;; *Update*) cmd_update;; *Rollback*) cmd_rollback;;
-    *Theme*) cmd_theme;;
-    *Transparenz*) if gum confirm "Transparenz einschalten?"; then cmd_glass an; else cmd_glass aus; fi;; *Systeminfo*) fastfetch;;
+    *Dunkel*) cmd_modus;; *Raster*) cmd_fenster;;
+    *Transparenz*) if gum confirm "Transparenz einschalten?"; then cmd_glass an; else cmd_glass aus; fi;;
+    *Spickzettel*) cmd_tipps;; *Systeminfo*) fastfetch;; *Box*) cmd_box;;
     *starten*) cmd_lab up;; *stoppen*) cmd_lab down;;
   esac
 }
@@ -190,13 +405,19 @@ case "${1:-}" in
   status)      cmd_status;;
   update)      cmd_update;;
   rollback)    cmd_rollback;;
+  modus|mode)  shift; cmd_modus "$@";;
+  auto)        shift; cmd_auto "${1:-}";;
   theme)       shift; cmd_theme "${1:-}";;
+  fenster)     shift; cmd_fenster "${1:-}";;
+  tipps)       shift; cmd_tipps "${1:-}";;
+  tipp)        cmd_tipp;;
   info)        fastfetch;;
   tee)         shift; pandasay "$@";;
-  lab)         shift; cmd_lab "${1:-up}";;
+  box)         shift; cmd_box "${1:-}";;
+  lab)         shift; cmd_lab "${1:-up}" "${2:-}";;
   setup)       shift; cmd_setup "${1:-}";;
-  layout)      cmd_theme "$THEME" --layout;;
+  layout)      apply_theme "$THEME" --layout;;
   glas)        shift; cmd_glass "${1:-an}";;
-  -h|--help|help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//';;
-  *)           warn "Unbekannter Befehl: $1"; sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
+  -h|--help|help) usage;;
+  *)           warn "Unbekannter Befehl: $1"; usage; exit 1;;
 esac

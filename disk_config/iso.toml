@@ -1,0 +1,28 @@
+# kissa – Installer-ISO (bootc-image-builder, Typ anaconda-iso)
+# Gebaut von .github/workflows/iso.yml. Vorlage: ublue-os/image-template, disk_config/iso-kde.toml
+#
+# Das ISO enthält kissa direkt. Nach der Installation stellt %post die Update-Quelle auf
+# ghcr.io/lauzedao/kissa um – mit Signaturprüfung, d. h. Updates nur mit gültiger Signatur.
+
+[customizations.installer.kickstart]
+contents = """
+%post
+bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry ghcr.io/lauzedao/kissa:latest
+%end
+"""
+
+# Users bleibt aktiv: Im Installer wird der eigene Benutzer (als Administrator) angelegt.
+# Ohne dieses Modul gäbe es nach der Installation kein Konto zum Anmelden.
+[customizations.installer.modules]
+enable = [
+  "org.fedoraproject.Anaconda.Modules.Storage",
+  "org.fedoraproject.Anaconda.Modules.Runtime",
+  "org.fedoraproject.Anaconda.Modules.Network",
+  "org.fedoraproject.Anaconda.Modules.Security",
+  "org.fedoraproject.Anaconda.Modules.Services",
+  "org.fedoraproject.Anaconda.Modules.Users",
+  "org.fedoraproject.Anaconda.Modules.Timezone"
+]
+disable = [
+  "org.fedoraproject.Anaconda.Modules.Subscription",
+]

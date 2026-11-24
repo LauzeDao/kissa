@@ -1,0 +1,7 @@
+[Unit]
+Description=kissa: Jahreszeit und Tag/Nacht anwenden
+After=plasma-workspace.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/kissa auto

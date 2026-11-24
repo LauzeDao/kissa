@@ -33,7 +33,11 @@ install_from_tar() {
 
 # ---------- Pakete aus den Fedora-Repos ----------
 dnf5 install -y \
+  btop \
+  distrobox \
   fastfetch \
+  mtr \
+  papirus-icon-theme \
   konsole \
   plymouth-plugin-script \
   sddm sddm-breeze sddm-kcm sddm-wayland-plasma
@@ -87,6 +91,35 @@ fetch_checked "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}
               "https://github.com/derailed/k9s/releases/download/v${K9S_VERSION}/checksums.sha256" "$TMP/$f"
 install_from_tar "$TMP/$f" k9s
 
+# OpenTofu (freie Terraform-Alternative, gleiche Sprache)
+f=tofu_${TOFU_VERSION}_linux_amd64.tar.gz
+fetch_checked "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/$f" \
+              "https://github.com/opentofu/opentofu/releases/download/v${TOFU_VERSION}/tofu_${TOFU_VERSION}_SHA256SUMS" "$TMP/$f"
+install_from_tar "$TMP/$f" tofu
+
+# Helm (Kubernetes-Paketmanager)
+f=helm-v${HELM_VERSION}-linux-amd64.tar.gz
+fetch_checked "https://get.helm.sh/$f" "https://get.helm.sh/$f.sha256sum" "$TMP/$f"
+install_from_tar "$TMP/$f" helm
+
+# Flux (GitOps für Kubernetes)
+f=flux_${FLUX_VERSION}_linux_amd64.tar.gz
+fetch_checked "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/$f" \
+              "https://github.com/fluxcd/flux2/releases/download/v${FLUX_VERSION}/flux_${FLUX_VERSION}_checksums.txt" "$TMP/$f"
+install_from_tar "$TMP/$f" flux
+
+# STACKIT CLI (Cloud des neuen Jobs)
+f=stackit-cli_${STACKIT_VERSION}_linux_amd64.tar.gz
+fetch_checked "https://github.com/stackitcloud/stackit-cli/releases/download/v${STACKIT_VERSION}/$f" \
+              "https://github.com/stackitcloud/stackit-cli/releases/download/v${STACKIT_VERSION}/stackit-cli_${STACKIT_VERSION}_checksums.txt" "$TMP/$f"
+install_from_tar "$TMP/$f" stackit
+
+# glab (GitLab-CLI: Merge Requests, Pipelines)
+f=glab_${GLAB_VERSION}_linux_amd64.tar.gz
+GLAB_PKG="https://gitlab.com/api/v4/projects/gitlab-org%2Fcli/packages/generic/glab/${GLAB_VERSION}"
+fetch_checked "$GLAB_PKG/$f" "$GLAB_PKG/checksums.txt" "$TMP/$f"
+install_from_tar "$TMP/$f" glab
+
 # JetBrainsMono Nerd Font (für Prompt-Symbole im Terminal)
 fetch_checked "https://github.com/ryanoasis/nerd-fonts/releases/download/v${NERDFONTS_VERSION}/JetBrainsMono.tar.xz" \
               "https://github.com/ryanoasis/nerd-fonts/releases/download/v${NERDFONTS_VERSION}/SHA-256.txt" "$TMP/JetBrainsMono.tar.xz"
@@ -119,6 +152,43 @@ grep -v '^\s*#' /ctx/cursor-aliases.txt | while read -r target aliases; do
   for a in $aliases; do ln -sf "$target" "$CURSORS/$a"; done
 done
 
+# ---------- Icons: Papirus mit Ordnern in kissa-Farben ----------
+# Papirus bringt jede Ordnerfarbe als eigene Datei mit (folder-green-*.svg, folder-pink-*.svg).
+# Wir kopieren eine Farbvariante, färben sie auf die kissa-Töne um und benennen sie auf die
+# Standardnamen (folder-*.svg) um. Alles Übrige erbt das Theme von Papirus.
+make_icon_theme() {
+  local name=$1 label=$2 inherits=$3 src=$4; shift 4
+  local dst=/usr/share/icons/$name dirs=() d size scale px f base sedargs=()
+  while (( $# )); do sedargs+=(-e "s/$1/$2/Ig"); shift 2; done
+  : > "$TMP/$name.dirs"
+  for d in /usr/share/icons/Papirus/*/places; do
+    size=$(basename "$(dirname "$d")")
+    [[ $size =~ ^[0-9]+x[0-9]+(@2x)?$ ]] || continue
+    mkdir -p "$dst/$size/places"
+    for f in "$d"/folder-"$src"*.svg "$d"/user-"$src"*.svg; do
+      [[ -e $f ]] || continue
+      base=$(basename "$f")
+      sed "${sedargs[@]}" "$(readlink -f "$f")" > "$dst/$size/places/${base/-$src/}"
+    done
+    px=${size%%x*}; scale=1; [[ $size == *@2x ]] && scale=2
+    dirs+=("$size/places")
+    printf '[%s/places]\nContext=Places\nSize=%s\nScale=%s\nType=Fixed\n\n' "$size" "$px" "$scale" >> "$TMP/$name.dirs"
+  done
+  (( ${#dirs[@]} > 0 )) || { echo "Papirus-Ordnersymbole nicht gefunden" >&2; exit 1; }
+  {
+    printf '[Icon Theme]\nName=%s\nComment=Papirus mit kissa-Ordnerfarben\nInherits=%s\n' "$label" "$inherits"
+    printf 'Directories=%s\n\n' "$(IFS=,; echo "${dirs[*]}")"
+    cat "$TMP/$name.dirs"
+  } > "$dst/index.theme"
+  gtk-update-icon-cache -f -q "$dst" 2>/dev/null || true
+}
+#               Name          Anzeige         erbt von                     Quelle  Farbe alt → neu (Vorderseite, Rückseite, Symbol)
+make_icon_theme kissa-matcha  "kissa Matcha"  Papirus-Light,breeze,hicolor green '#87b158' '#8FAE62' '#60924b' '#6B8A43' '#2f3e1f' '#2F3A20'
+make_icon_theme kissa-hojicha "kissa Hojicha" Papirus-Dark,breeze,hicolor  pink  '#f06292' '#F0B6C1' '#ec407a' '#E39BAA' '#542233' '#5A2E38'
+
+# ---------- Jahreszeiten + Tag/Nacht: Timer für alle Benutzer ----------
+systemctl --global enable kissa-auto.timer
+
 # ---------- Härtung ----------
 # 1. Updates nur mit gültiger Signatur: Regel für unser Image in die bestehende
 #    policy.json einfügen (Aurora bringt dort schon eigene Regeln mit).
@@ -148,7 +218,7 @@ firewall-offline-cmd --set-default-zone=kissa
 systemctl disable sshd.service 2>/dev/null || true
 
 # ---------- Sonstiges ----------
-chmod 0755 /usr/bin/kissa /usr/bin/pandasay /usr/libexec/kissa-flatpaks
+chmod 0755 /usr/bin/kissa /usr/bin/pandasay /usr/libexec/kissa-flatpaks /usr/libexec/kissa-sun
 systemctl enable kissa-flatpaks.service
 sed -i 's/^PRETTY_NAME=.*/PRETTY_NAME="kissa (Fedora Atomic · Aurora)"/' /usr/lib/os-release
 
