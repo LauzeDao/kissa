@@ -32,7 +32,7 @@ install_from_tar() {
 dnf5 install -y \
   fastfetch \
   plymouth-plugin-script \
-  sddm sddm-kcm sddm-wayland-plasma
+  sddm sddm-breeze sddm-kcm sddm-wayland-plasma
 
 # ---------- Tools als gepinnte Releases ----------
 # starship (Prompt)
