@@ -40,6 +40,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Konfiguration prüfen (bash, TOML, JSON)
+        run: bash tools/check.sh
+
       - name: Image-Namen und Tags festlegen
         run: |
           # GHCR verlangt Kleinbuchstaben (LauzeDao -> lauzedao)
