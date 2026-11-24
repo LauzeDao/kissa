@@ -1,0 +1,91 @@
+# kissa – Plymouth-Bootsplash
+# Hojicha-Hintergrund, Hoji mit Laterne, Schriftzug und fünf Ladepunkte als Welle.
+# Fragt bei verschlüsselter Platte nach dem Passwort (Punkte statt Zeichen).
+
+Window.SetBackgroundTopColor(0.165, 0.129, 0.110);     # #2A211C
+Window.SetBackgroundBottomColor(0.082, 0.063, 0.051);  # #15100D
+
+W = Window.GetWidth();
+H = Window.GetHeight();
+
+hoji_img = Image("hoji.png");
+hoji = Sprite(hoji_img);
+hoji.SetPosition(W / 2 - hoji_img.GetWidth() / 2, H / 2 - hoji_img.GetHeight() / 2 - 60, 10);
+
+mark_img = Image("wordmark.png");
+mark = Sprite(mark_img);
+mark_y = H / 2 + hoji_img.GetHeight() / 2 - 30;
+mark.SetPosition(W / 2 - mark_img.GetWidth() / 2, mark_y, 10);
+
+dot_on = Image("dot-on.png");
+dot_off = Image("dot-off.png");
+DOTS = 5;
+GAP = 26;
+dots_y = mark_y + mark_img.GetHeight() + 28;
+i = 0;
+while (i < DOTS) {
+    dot[i] = Sprite(dot_off);
+    dot[i].SetPosition(W / 2 - (DOTS * GAP) / 2 + i * GAP + (GAP - dot_off.GetWidth()) / 2, dots_y, 10);
+    i++;
+}
+
+tick = 0;
+fun refresh() {
+    global.tick++;
+    active = Math.Int(global.tick / 10) % DOTS;
+    j = 0;
+    while (j < DOTS) {
+        if (j == active) dot[j].SetImage(dot_on);
+        else dot[j].SetImage(dot_off);
+        j++;
+    }
+}
+Plymouth.SetRefreshFunction(refresh);
+
+# ---------- Passwortabfrage (LUKS) ----------
+pw_y = dots_y + 50;
+
+fun hide_password() {
+    if (global.pw_prompt) global.pw_prompt.SetOpacity(0);
+    k = 0;
+    while (k < 64) {
+        if (global.pw_bullet[k]) global.pw_bullet[k].SetOpacity(0);
+        k++;
+    }
+}
+
+fun display_password(prompt, bullets) {
+    hide_password();
+    if (prompt == "") prompt = "Passwort";
+    img = Image.Text(prompt, 0.93, 0.89, 0.83);
+    global.pw_prompt = Sprite(img);
+    global.pw_prompt.SetPosition(W / 2 - img.GetWidth() / 2, pw_y, 20);
+    global.pw_prompt.SetOpacity(1);
+    k = 0;
+    while (k < bullets && k < 64) {
+        global.pw_bullet[k] = Sprite(dot_on);
+        global.pw_bullet[k].SetPosition(W / 2 - (bullets * 18) / 2 + k * 18, pw_y + img.GetHeight() + 14, 20);
+        global.pw_bullet[k].SetOpacity(1);
+        k++;
+    }
+}
+
+fun display_normal() {
+    hide_password();
+}
+
+Plymouth.SetDisplayPasswordFunction(display_password);
+Plymouth.SetDisplayNormalFunction(display_normal);
+
+# ---------- Meldungen (z. B. "Dateisystem wird geprüft") ----------
+fun show_message(text) {
+    img = Image.Text(text, 0.66, 0.60, 0.54);
+    global.msg = Sprite(img);
+    global.msg.SetPosition(W / 2 - img.GetWidth() / 2, H - 60, 20);
+}
+Plymouth.SetMessageFunction(show_message);
+
+fun quit() {
+    hide_password();
+}
+Plymouth.SetQuitFunction(quit);

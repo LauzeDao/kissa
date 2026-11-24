@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# pandasay – wie cowsay, nur mit rotem Panda.
+#   pandasay "Hallo"        -> Panda sagt "Hallo"
+#   pandasay                -> Panda sagt einen zufälligen Spruch
+#   echo "Hi" | pandasay    -> Text aus einer Pipe
+set -euo pipefail
+
+KISSA_SHARE="${KISSA_SHARE:-/usr/share/kissa}"
+THEME="$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/kissa/theme" 2>/dev/null || echo matcha)"
+case $THEME in hojicha) ACCENT=$'\e[38;2;240;182;193m';; *) THEME=matcha; ACCENT=$'\e[38;2;122;154;79m';; esac
+R=$'\e[0m'
+
+sprueche=(
+  "Trink erstmal einen Tee. Der Cluster läuft auch ohne dich."
+  "Ein Rollback ist nur einen Befehl entfernt: sudo bootc rollback"
+  "Erst kubectl get, dann kubectl delete."
+  "Hast du heute schon committet?"
+  "It works on my machine. Und deine Machine ist ein Container-Image."
+  "Lies die Logs. Die Logs wissen mehr als du."
+  "Ein kleiner PR ist ein glücklicher PR."
+  "Pausen sind auch Deployments – für dein Gehirn."
+)
+
+if [[ $# -gt 0 ]]; then
+  msg="$*"
+elif [[ ! -t 0 ]]; then
+  msg="$(cat)"
+fi
+[[ -z "${msg:-}" ]] && msg="${sprueche[RANDOM % ${#sprueche[@]}]}"
+
+mapfile -t lines < <(printf '%s\n' "$msg" | fold -s -w 40 | sed 's/ *$//')
+width=0
+for l in "${lines[@]}"; do (( ${#l} > width )) && width=${#l}; done
+
+bar=$(printf '─%.0s' $(seq 1 $((width + 2))))
+printf '%s╭%s╮%s\n' "$ACCENT" "$bar" "$R"
+for l in "${lines[@]}"; do
+  printf '%s│%s %s%*s %s│%s\n' "$ACCENT" "$R" "$l" $((width - ${#l})) "" "$ACCENT" "$R"
+done
+printf '%s╰%s╯%s\n' "$ACCENT" "$bar" "$R"
+printf '%s   ╲%s\n' "$ACCENT" "$R"
+sprite="$KISSA_SHARE/hoji-$THEME.ansi"
+if [[ -r $sprite ]]; then
+  sed 's/^/ /' "$sprite"
+else  # Fallback ohne Sprite-Datei
+  printf '   ʕ•ᴥ•ʔ  ← Hoji (Sprite fehlt: %s)\n' "$sprite"
+fi

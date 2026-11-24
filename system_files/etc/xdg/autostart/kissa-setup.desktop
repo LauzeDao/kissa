@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=kissa Einrichtung
+Comment=Richtet Theme, Terminal und Prompt beim ersten Login ein
+Exec=/usr/bin/kissa setup --once
+NoDisplay=true
+X-KDE-autostart-phase=2

@@ -1,0 +1,64 @@
+# kissa – Starship-Prompt  (Ziel: ~/.config/starship.toml)
+# Braucht eine Nerd Font im Terminal (für die runden Pillen-Kanten).
+# Palette wechselt "kissa theme matcha|hojicha" automatisch.
+"$schema" = "https://starship.rs/config-schema.json"
+palette = "matcha"
+add_newline = true
+
+format = """
+[](fg:rust)$username[](fg:rust bg:milk)$directory[](fg:milk bg:accent)$git_branch$git_status[](fg:accent) $kubernetes$cmd_duration
+$character"""
+
+[username]
+show_always = true
+style_user = "fg:tofu bg:rust bold"
+style_root = "fg:tofu bg:rust bold"
+format = "[ 🐾 $user ]($style)"
+
+[directory]
+style = "fg:ink bg:milk"
+format = "[ $path ]($style)"
+truncation_length = 3
+truncation_symbol = "…/"
+
+[git_branch]
+style = "fg:tofu bg:accent"
+format = "[  $branch ]($style)"
+
+[git_status]
+style = "fg:tofu bg:accent"
+format = "[($all_status$ahead_behind )]($style)"
+
+[kubernetes]
+disabled = false
+style = "fg:indigo bold"
+format = "[⎈ $context( \($namespace\))]($style) "
+
+[cmd_duration]
+min_time = 2000
+style = "fg:kinako"
+format = "[⏱ $duration]($style)"
+
+[character]
+success_symbol = "[❯](bold fg:accent)"
+error_symbol = "[(;ω;) ❯](bold fg:umeboshi)"
+
+[palettes.matcha]       # hell, an Rosé Pine Dawn angelehnt
+rust = "#D06A35"
+tofu = "#FFFAF3"
+milk = "#F2E9E1"
+accent = "#7A9A4F"
+ink = "#575279"
+indigo = "#286983"
+kinako = "#EA9D34"
+umeboshi = "#B4637A"
+
+[palettes.hojicha]      # dunkel, Akzent Pastellrosa
+rust = "#D06A35"
+tofu = "#2A211C"
+milk = "#43362D"
+accent = "#F0B6C1"
+ink = "#EDE3D3"
+indigo = "#8FB0CF"
+kinako = "#E3B860"
+umeboshi = "#E07A6A"

@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# kissa – die Kommandozentrale deines Systems.
+#   kissa                 Menü öffnen
+#   kissa status          Welches Image läuft gerade?
+#   kissa update          Neues Image holen (wird beim nächsten Neustart aktiv)
+#   kissa rollback        Zurück zum vorherigen Image
+#   kissa theme [matcha|hojicha]   Hell/Dunkel umschalten
+#   kissa info            Systemübersicht (fastfetch)
+#   kissa tee [text]      Der Panda sagt etwas
+#   kissa lab up|down     Lokalen Kubernetes-Cluster (kind) starten/stoppen
+#   kissa setup           Terminal, Prompt und Theme für deinen Benutzer einrichten
+set -euo pipefail
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
+KISSA_SHARE="${KISSA_SHARE:-/usr/share/kissa}"
+WALLPAPERS="${KISSA_WALLPAPERS:-/usr/share/backgrounds/kissa}"
+THEME="$(cat "$CONF/kissa/theme" 2>/dev/null || echo matcha)"
+RUST="#D06A35"; MUTED="#9893A5"
+case $THEME in hojicha) ACCENT="#F0B6C1"; UME="#E07A6A";; *) ACCENT="#7A9A4F"; UME="#B4637A";; esac
+has() { command -v "$1" >/dev/null 2>&1; }
+
+# ---------- Darstellung (mit gum hübsch, ohne gum schlicht) ----------
+title() {
+  if has gum; then
+    gum style --border rounded --border-foreground "$RUST" --foreground "$RUST" \
+      --bold --padding "0 2" --margin "1 0 0 0" "喫茶 kissa · $*"
+  else printf '\n== kissa · %s ==\n' "$*"; fi
+}
+ok()   { if has gum; then gum style --foreground "$ACCENT" "✓ $*"; else echo "✓ $*"; fi; }
+warn() { if has gum; then gum style --foreground "$UME"    "✗ $*"; else echo "✗ $*" >&2; fi; }
+note() { if has gum; then gum style --foreground "$MUTED" "$*"; else echo "$*"; fi; }
+confirm() { if has gum; then gum confirm --selected.background "$ACCENT" "$1"; else read -rp "$1 [j/N] " a; [[ $a == [jJyY] ]]; fi; }
+spin() { local t=$1; shift; if has gum; then gum spin --spinner moon --title "$t" --show-output -- "$@"; else echo "$t"; "$@"; fi; }
+
+# ---------- Befehle ----------
+cmd_status() {
+  title "Status"
+  if has bootc; then sudo bootc status --format humanreadable 2>/dev/null || sudo bootc status
+  else warn "bootc nicht gefunden – läuft das hier wirklich auf kissa?"; fi
+}
+
+cmd_update() {
+  title "Update"
+  spin "Hoji schaut nach einem neuen Image …" sudo bootc upgrade
+  ok "Fertig. Das neue Image ist beim nächsten Neustart aktiv."
+  note "Gefällt es dir nicht? → kissa rollback"
+}
+
+cmd_rollback() {
+  title "Rollback"
+  note "Beim nächsten Neustart startet wieder das vorherige Image."
+  if confirm "Wirklich zurückrollen?"; then sudo bootc rollback && ok "Rollback vorgemerkt. Bitte neu starten."
+  else note "Abgebrochen."; fi
+}
+
+cmd_theme() {
+  local t="${1:-}"
+  if [[ -z $t ]]; then
+    if has gum; then t=$(gum choose --header "Welche Teesorte?" --cursor.foreground "$RUST" matcha hojicha)
+    else read -rp "matcha oder hojicha? " t; fi
+  fi
+  case $t in matcha|hojicha) ;; *) warn "Unbekanntes Theme: $t (matcha oder hojicha)"; return 1;; esac
+  title "Theme → $t"
+  local Name="Kissa${t^}"
+  has plasma-apply-colorscheme    && plasma-apply-colorscheme "$Name" >/dev/null && ok "Desktop-Farben"
+  # Das Wallpaper-Paket hat eine helle und eine dunkle Variante, Plasma wählt passend zum Farbschema.
+  [[ -d $WALLPAPERS ]] && has plasma-apply-wallpaperimage \
+    && plasma-apply-wallpaperimage "$WALLPAPERS" >/dev/null && ok "Hintergrundbild"
+  mkdir -p "$CONF/kissa" && echo "$t" > "$CONF/kissa/theme"
+  ln -sf "$KISSA_SHARE/hoji-$t.ansi" "$CONF/kissa/hoji.ansi" && ok "Hoji im Terminal"
+  local key; [[ $t == hojicha ]] && key="38;2;240;182;193" || key="38;2;122;154;79"
+  [[ -f $CONF/fastfetch/config.jsonc ]] && sed -i "s/\"keys\": \"[^\"]*\"/\"keys\": \"$key\"/" "$CONF/fastfetch/config.jsonc" && ok "fastfetch"
+  [[ -f $CONF/starship.toml ]] && sed -i "s/^palette = .*/palette = \"$t\"/" "$CONF/starship.toml" && ok "Prompt"
+  if has kwriteconfig6; then
+    kwriteconfig6 --file konsolerc --group "Desktop Entry" --key DefaultProfile "kissa-$t.profile" && ok "Terminal-Profil"
+  fi
+  if [[ -n ${KONSOLE_VERSION:-} ]] && has konsoleprofile; then konsoleprofile "ColorScheme=kissa-$t"; fi
+  note "Neue Terminals übernehmen das Theme automatisch."
+}
+
+cmd_lab() {
+  local action="${1:-up}" name="kissa-lab"
+  has kind || { warn "kind ist nicht installiert."; return 1; }
+  export KIND_EXPERIMENTAL_PROVIDER=podman
+  case $action in
+    up)   title "K8s-Lab starten"
+          spin "Cluster wird gebaut (dauert ca. 1 Minute) …" kind create cluster --name "$name"
+          ok "Cluster läuft. Probier: kubectl get nodes  oder  k9s";;
+    down) title "K8s-Lab stoppen"
+          confirm "Cluster $name löschen?" && kind delete cluster --name "$name" && ok "Weg ist er.";;
+    *)    warn "kissa lab up | down";;
+  esac
+}
+
+cmd_setup() {
+  # --once: nur beim allerersten Login (Autostart), danach nie wieder automatisch
+  if [[ ${1:-} == --once && -f $CONF/kissa/theme ]]; then return 0; fi
+  title "Einrichtung"
+  mkdir -p "$CONF/fastfetch" "$CONF/kissa"
+  if [[ ! -f $CONF/fastfetch/config.jsonc ]]; then cp "$KISSA_SHARE/skel/fastfetch/config.jsonc" "$CONF/fastfetch/" && ok "fastfetch"; fi
+  if [[ ! -f $CONF/starship.toml ]]; then cp "$KISSA_SHARE/skel/starship.toml" "$CONF/" && ok "Prompt"; fi
+  if ! grep -q "bashrc-kissa.sh" "$HOME/.bashrc" 2>/dev/null; then
+    printf '\n# kissa: Prompt, Begrüßung, Aliase\n[ -f %s/bashrc-kissa.sh ] && source %s/bashrc-kissa.sh\n' \
+      "$KISSA_SHARE" "$KISSA_SHARE" >> "$HOME/.bashrc"
+    ok "bash"
+  fi
+  local t; t="$(cat "$CONF/kissa/theme" 2>/dev/null || echo matcha)"
+  cmd_theme "$t"
+}
+
+cmd_menu() {
+  has gum || { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; return; }
+  pandasay "Was möchtest du tun?" 2>/dev/null || title "Menü"
+  local c
+  c=$(gum choose --cursor.foreground "$RUST" --selected.foreground "$ACCENT" \
+      "🍵 Status" "⬆️  Update" "↩️  Rollback" "🎨 Theme" "🐾 Systeminfo" "⎈  K8s-Lab starten" "🧹 K8s-Lab stoppen" "Beenden") || return 0
+  case $c in
+    *Status*) cmd_status;; *Update*) cmd_update;; *Rollback*) cmd_rollback;;
+    *Theme*) cmd_theme;; *Systeminfo*) fastfetch;;
+    *starten*) cmd_lab up;; *stoppen*) cmd_lab down;;
+  esac
+}
+
+case "${1:-}" in
+  "")          cmd_menu;;
+  status)      cmd_status;;
+  update)      cmd_update;;
+  rollback)    cmd_rollback;;
+  theme)       shift; cmd_theme "${1:-}";;
+  info)        fastfetch;;
+  tee)         shift; pandasay "$@";;
+  lab)         shift; cmd_lab "${1:-up}";;
+  setup)       shift; cmd_setup "${1:-}";;
+  -h|--help|help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//';;
+  *)           warn "Unbekannter Befehl: $1"; sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 1;;
+esac

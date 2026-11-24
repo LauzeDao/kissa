@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=kissa
+Description=Hoji mit seiner Laterne – Bootsplash für kissa
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/kissa
+ScriptFile=/usr/share/plymouth/themes/kissa/kissa.script

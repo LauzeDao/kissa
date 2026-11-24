@@ -1,0 +1,92 @@
+# kissa – Image bauen, nach GHCR pushen und signieren
+#
+# - push auf main / manuell: bauen, pushen, signieren
+# - täglich: neu bauen, damit Aurora- und Fedora-Updates ankommen
+# - Pull Request: nur bauen (Test), nichts pushen
+name: build kissa
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md", "assets/**", "tools/**"]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "30 4 * * *" # täglich 04:30 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE_NAME: kissa
+  # podman und cosign teilen sich dieselbe Login-Datei
+  REGISTRY_AUTH_FILE: /home/runner/.docker/config.json
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write # Push nach ghcr.io
+      id-token: write # Keyless-Signatur mit cosign (GitHub OIDC)
+    steps:
+      - name: Speicherplatz freimachen (das Image ist groß)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Image-Namen und Tags festlegen
+        run: |
+          # GHCR verlangt Kleinbuchstaben (LauzeDao -> lauzedao)
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "IMAGE=ghcr.io/${owner}/${IMAGE_NAME}" >> "$GITHUB_ENV"
+          echo "DATE_TAG=$(date -u +%Y%m%d)" >> "$GITHUB_ENV"
+
+      - name: Image bauen
+        run: |
+          podman build \
+            --pull=newer \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.version=${DATE_TAG}" \
+            -t "${IMAGE}:latest" \
+            -t "${IMAGE}:${DATE_TAG}" \
+            .
+
+      - name: Bei GHCR anmelden
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p "$(dirname "$REGISTRY_AUTH_FILE")"
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Image pushen
+        if: github.event_name != 'pull_request'
+        run: |
+          podman push --digestfile digest.txt "${IMAGE}:latest"
+          podman push "${IMAGE}:${DATE_TAG}"
+          echo "DIGEST=$(cat digest.txt)" >> "$GITHUB_ENV"
+
+      - name: cosign installieren
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3
+
+      - name: Image signieren (keyless)
+        if: github.event_name != 'pull_request'
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+      - name: Zusammenfassung
+        if: github.event_name != 'pull_request'
+        run: |
+          {
+            echo "### 🐾 kissa gebaut"
+            echo ""
+            echo "- Image: \`${IMAGE}:latest\` und \`${IMAGE}:${DATE_TAG}\`"
+            echo "- Digest: \`${DIGEST}\`"
+            echo ""
+            echo "Umsteigen: \`sudo bootc switch ${IMAGE}:latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"

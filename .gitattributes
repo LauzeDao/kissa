@@ -1,0 +1,5 @@
+# Linux-Dateien immer mit LF, auch wenn unter Windows bearbeitet
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ansi text eol=lf
