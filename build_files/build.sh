@@ -122,13 +122,23 @@ done
 # ---------- Härtung ----------
 # 1. Updates nur mit gültiger Signatur: Regel für unser Image in die bestehende
 #    policy.json einfügen (Aurora bringt dort schon eigene Regeln mit).
+#    Neuere Fedora-Versionen liefern die Standardregeln unter /usr/share/containers/,
+#    /etc/containers/policy.json überschreibt sie dann komplett – deshalb als Basis übernehmen.
 install -D -m 0644 /ctx/cosign.pub /etc/pki/containers/kissa.pub
+policy_src=/etc/containers/policy.json
+[[ -f $policy_src ]] || policy_src=/usr/share/containers/policy.json
+if [[ -f $policy_src ]]; then
+  cp "$policy_src" /tmp/policy-base.json
+else
+  echo '{"default":[{"type":"insecureAcceptAnything"}],"transports":{"docker-daemon":{"":[{"type":"insecureAcceptAnything"}]}}}' > /tmp/policy-base.json
+fi
+echo "Basis für policy.json: $policy_src"
 jq '.transports.docker["ghcr.io/lauzedao/kissa"] = [{
       "type": "sigstoreSigned",
       "keyPath": "/etc/pki/containers/kissa.pub",
       "signedIdentity": {"type": "matchRepository"}
-    }]' /etc/containers/policy.json > /tmp/policy.json
-mv /tmp/policy.json /etc/containers/policy.json
+    }]' /tmp/policy-base.json > /tmp/policy.json
+install -D -m 0644 /tmp/policy.json /etc/containers/policy.json
 jq -e '.transports.docker["ghcr.io/lauzedao/kissa"]' /etc/containers/policy.json >/dev/null
 
 # 2. Firewall: eigene Zone "kissa" als Standard (eingehend zu, außer mDNS + KDE Connect)
