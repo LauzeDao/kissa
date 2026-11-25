@@ -90,17 +90,18 @@ wanted_theme() {
   esac
 }
 
+# Gesetzt wird das ganze Wallpaper-Paket (images + images_dark), nicht ein einzelnes Bild:
+# Plasma nimmt dann selbst die Tag- oder Nachtversion passend zum Farbschema – auch wenn
+# hell/dunkel über die Systemeinstellungen statt über "kissa modus" umgestellt wird.
 wallpaper_for() {   # <theme> [jahreszeit]
-  local s=${2:-$(season)} sub=images
-  [[ $1 == hojicha ]] && sub=images_dark
-  local img="$WALLPAPERS/Kissa-$s/contents/$sub/3840x2160.jpg"
-  [[ -f $img ]] || img="$WALLPAPERS/Kissa/contents/$sub/3840x2160.png"
-  echo "$img"
+  local pkg="$WALLPAPERS/Kissa-${2:-$(season)}"
+  [[ -d $pkg/contents ]] || pkg="$WALLPAPERS/Kissa"
+  echo "$pkg"
 }
 
 set_wallpaper() {
   local img; img=$(wallpaper_for "$@")
-  [[ -f $img ]] && has plasma-apply-wallpaperimage || return 0
+  [[ -d $img ]] && has plasma-apply-wallpaperimage || return 0
   if plasma-apply-wallpaperimage "$img" >/dev/null 2>&1; then ok "Hintergrundbild ($(season))"
   else warn "Hintergrundbild nicht gesetzt (läuft Plasma?)"; fi
 }
@@ -172,6 +173,11 @@ apply_theme() {
     ok "Desktop-Farben"; warn "Global Theme org.kissa.$t nicht angewendet, nur die Farben"
   else
     warn "Desktop-Theme nicht gesetzt (läuft Plasma?)"
+  fi
+  # Mauszeiger ausdrücklich setzen – das Global Theme übernimmt ihn nicht immer zuverlässig
+  has kwriteconfig6 && kwriteconfig6 --file kcminputrc --group Mouse --key cursorSize 32
+  if has plasma-apply-cursortheme && plasma-apply-cursortheme kissa-cursors >/dev/null 2>&1; then
+    ok "Mauszeiger"
   fi
   set_wallpaper "$t"
   mkdir -p "$CONF/kissa" && echo "$t" > "$CONF/kissa/theme"

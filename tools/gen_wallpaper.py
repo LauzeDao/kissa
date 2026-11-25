@@ -165,14 +165,15 @@ def blossom(x, y, s):
 
 
 def sakura_branch():
-    x0, y0 = CX - 540, 215
-    twigs = (f'<path d="M{x0-80} {y0-40} C{x0+60} {y0+10} {x0+170} {y0+40} {x0+330} {y0+110}" />'
-             f'<path d="M{x0+120} {y0+26} C{x0+150} {y0+80} {x0+190} {y0+110} {x0+230} {y0+130}" />'
-             f'<path d="M{x0+250} {y0+74} C{x0+270} {y0+40} {x0+300} {y0+30} {x0+340} {y0+28}" />')
+    # Zweig ragt vom linken Bildrand in den Himmel und endet frei in der Luft –
+    # deutlich über und links vom Schild (Schildkopf: x 648–772, y ab 341).
+    twigs = ('<path d="M-30 140 C150 140 330 180 560 236" />'          # Hauptast, dünner werdend gedacht
+             '<path d="M210 160 C240 205 280 232 330 248" />'          # Zweig nach unten
+             '<path d="M400 196 C420 166 455 150 500 146" />')         # Zweig nach oben
     wood = (f'<g fill="none" stroke-linecap="round"><g stroke="{LINE}" stroke-width="16">{twigs}</g>'
             f'<g stroke="#7A5A4A" stroke-width="10">{twigs}</g></g>')
-    spots = [(x0+20, y0-6, 1.1), (x0+110, y0+12, .9), (x0+190, y0+40, 1.2), (x0+235, y0+132, 1.0),
-             (x0+300, y0+92, .9), (x0+338, y0+28, 1.1), (x0+160, y0+86, .8), (x0+340, y0+112, .8)]
+    spots = [(120, 142, 1.1), (255, 166, .9), (330, 248, 1.0), (285, 222, .8),
+             (430, 200, 1.2), (500, 146, 1.1), (560, 236, 1.0), (365, 186, .8)]
     return wood + "".join(blossom(x, y, sc) for x, y, sc in spots)
 
 
